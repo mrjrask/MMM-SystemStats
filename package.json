@@ -1,0 +1,9 @@
+{
+  "name": "MMM-SystemStats",
+  "version": "1.0.0",
+  "description": "A MagicMirror module to display system statistics (CPU, RAM, etc.)",
+  "main": "MMM-SystemStats.js",
+  "dependencies": {},
+  "author": "Jason",
+  "license": "MIT"
+}
