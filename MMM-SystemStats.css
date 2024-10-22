@@ -1,0 +1,28 @@
+.system-stats {
+    font-size: 20px; /* Make text larger */
+    text-align: left;
+}
+
+.cpu-usage, .cpu-temp, .ram-usage {
+    margin: 10px 0;
+}
+
+progress {
+    width: 100%;
+    height: 20px;
+    background-color: #e0e0e0;
+    border: 1px solid #ccc;
+}
+
+h2 {
+    margin-bottom: 5px;
+    font-size: 22px;
+}
+
+progress::-webkit-progress-value {
+    background-color: #4CAF50; /* Green bar for usage */
+}
+
+progress::-moz-progress-bar {
+    background-color: #4CAF50; /* Green bar for usage */
+}

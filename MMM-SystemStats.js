@@ -1,11 +1,11 @@
 Module.register("MMM-SystemStats", {
     defaults: {
-        updateInterval: 5000, // update every 5 seconds
+        updateInterval: 10000, // Update every 10 seconds
     },
 
     start: function() {
         this.stats = {
-            cpuUsage: [],
+            cpuUsage: 0,
             cpuTemp: 0,
             totalRam: 0,
             freeRam: 0
@@ -28,18 +28,16 @@ Module.register("MMM-SystemStats", {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Bars
+        // CPU Usage Bar (overall)
         let cpuUsageWrapper = document.createElement("div");
         cpuUsageWrapper.className = "cpu-usage";
         let titleCpu = document.createElement("h2");
         titleCpu.innerHTML = "CPU Usage:";
+        let cpuBar = document.createElement("progress");
+        cpuBar.value = this.stats.cpuUsage;
+        cpuBar.max = 100;
         cpuUsageWrapper.appendChild(titleCpu);
-
-        this.stats.cpuUsage.forEach((usage, core) => {
-            let coreUsage = document.createElement("div");
-            coreUsage.innerHTML = `Core ${core + 1}: <progress value="${usage}" max="100"></progress>`;
-            cpuUsageWrapper.appendChild(coreUsage);
-        });
+        cpuUsageWrapper.appendChild(cpuBar);
 
         // CPU Temperature
         let cpuTempWrapper = document.createElement("div");
@@ -59,6 +57,7 @@ Module.register("MMM-SystemStats", {
         ramUsageWrapper.appendChild(titleRam);
         ramUsageWrapper.appendChild(ramBar);
 
+        // Append all elements to the main wrapper
         wrapper.appendChild(cpuUsageWrapper);
         wrapper.appendChild(cpuTempWrapper);
         wrapper.appendChild(ramUsageWrapper);

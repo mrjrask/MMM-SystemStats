@@ -14,32 +14,41 @@ module.exports = NodeHelper.create({
     },
 
     getSystemStats: function() {
-        let stats = {
-            cpuUsage: this.getCpuUsage(),
-            cpuTemp: this.getCpuTemp(),
-            totalRam: Math.round(os.totalmem() / (1024 * 1024)),
-            freeRam: Math.round(os.freemem() / (1024 * 1024))
-        };
-
-        this.sendSocketNotification("SYSTEM_STATS", stats);
+        this.getCpuTemp().then((cpuTemp) => {
+            let stats = {
+                cpuUsage: this.getOverallCpuUsage(),
+                cpuTemp: cpuTemp,
+                totalRam: Math.round(os.totalmem() / (1024 * 1024)), // MB
+                freeRam: Math.round(os.freemem() / (1024 * 1024)) // MB
+            };
+            this.sendSocketNotification("SYSTEM_STATS", stats);
+        }).catch(err => {
+            console.error("Error fetching CPU temperature:", err);
+        });
     },
 
-    getCpuUsage: function() {
+    getOverallCpuUsage: function() {
         let cpus = os.cpus();
-        return cpus.map((cpu) => {
-            let total = 0;
+        let totalIdle = 0, totalTick = 0;
+
+        cpus.forEach((cpu) => {
             for (let type in cpu.times) {
-                total += cpu.times[type];
+                totalTick += cpu.times[type];
             }
-            return Math.round(((total - cpu.times.idle) / total) * 100);
+            totalIdle += cpu.times.idle;
         });
+
+        let idle = totalIdle / cpus.length;
+        let total = totalTick / cpus.length;
+        return Math.round(100 * ((total - idle) / total)); // Overall CPU usage percentage
     },
 
     getCpuTemp: function() {
         return new Promise((resolve, reject) => {
             exec("/opt/vc/bin/vcgencmd measure_temp", (err, stdout) => {
                 if (err) reject(err);
-                resolve(parseFloat(stdout.split("=")[1]));
+                let temp = parseFloat(stdout.split("=")[1]);
+                resolve(temp);
             });
         });
     }
