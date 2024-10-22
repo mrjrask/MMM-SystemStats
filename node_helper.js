@@ -17,13 +17,20 @@ module.exports = NodeHelper.create({
         this.getCpuTemp().then((cpuTemp) => {
             let stats = {
                 cpuUsage: this.getOverallCpuUsage(),
-                cpuTemp: cpuTemp,
+                cpuTemp: cpuTemp || "N/A",  // Better handling for the temperature
                 totalRam: Math.round(os.totalmem() / (1024 * 1024)), // MB
                 freeRam: Math.round(os.freemem() / (1024 * 1024)) // MB
             };
             this.sendSocketNotification("SYSTEM_STATS", stats);
         }).catch(err => {
             console.error("Error fetching CPU temperature:", err);
+            let stats = {
+                cpuUsage: this.getOverallCpuUsage(),
+                cpuTemp: "N/A",  // Show "N/A" if temperature can't be retrieved
+                totalRam: Math.round(os.totalmem() / (1024 * 1024)), // MB
+                freeRam: Math.round(os.freemem() / (1024 * 1024)) // MB
+            };
+            this.sendSocketNotification("SYSTEM_STATS", stats);
         });
     },
 
@@ -46,9 +53,13 @@ module.exports = NodeHelper.create({
     getCpuTemp: function() {
         return new Promise((resolve, reject) => {
             exec("/opt/vc/bin/vcgencmd measure_temp", (err, stdout) => {
-                if (err) reject(err);
-                let temp = parseFloat(stdout.split("=")[1]);
-                resolve(temp);
+                if (err) {
+                    console.error("Error getting CPU temperature:", err);
+                    reject(err);
+                } else {
+                    let temp = parseFloat(stdout.split("=")[1]);
+                    resolve(temp);
+                }
             });
         });
     }

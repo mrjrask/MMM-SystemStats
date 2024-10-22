@@ -28,11 +28,11 @@ Module.register("MMM-SystemStats", {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Bar (overall)
+        // CPU Usage Bar (overall) with percentage
         let cpuUsageWrapper = document.createElement("div");
         cpuUsageWrapper.className = "cpu-usage";
         let titleCpu = document.createElement("h2");
-        titleCpu.innerHTML = "CPU Usage:";
+        titleCpu.innerHTML = `CPU Usage: ${this.stats.cpuUsage}%`;
         let cpuBar = document.createElement("progress");
         cpuBar.value = this.stats.cpuUsage;
         cpuBar.max = 100;

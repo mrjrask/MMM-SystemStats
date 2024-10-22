@@ -4,7 +4,7 @@
 }
 
 .cpu-usage, .cpu-temp, .ram-usage {
-    margin: 10px 0;
+    margin: 5px 0; /* Reduce margin to bring elements closer together */
 }
 
 progress {
