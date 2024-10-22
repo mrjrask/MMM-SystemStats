@@ -1,61 +1,72 @@
 Module.register("MMM-SystemStats", {
     defaults: {
-        updateInterval: 10000, // Update every 10 seconds
+        cpuUpdateInterval: 1000, // CPU usage update every 1 second
+        tempUpdateInterval: 30000, // CPU temperature update every 30 seconds
     },
 
     start: function() {
         this.stats = {
             cpuUsage: 0,
-            cpuTemp: 0,
+            cpuTemp: "N/A",
             totalRam: 0,
             freeRam: 0
         };
-        this.updateStats();
-        this.scheduleUpdate();
+        this.updateCpuStats();
+        this.updateCpuTemp();
+        this.scheduleCpuStatsUpdate();
+        this.scheduleTempUpdate();
     },
 
-    updateStats: function() {
-        this.sendSocketNotification("GET_SYSTEM_STATS");
+    updateCpuStats: function() {
+        this.sendSocketNotification("GET_CPU_USAGE");
     },
 
-    scheduleUpdate: function() {
+    updateCpuTemp: function() {
+        this.sendSocketNotification("GET_CPU_TEMP");
+    },
+
+    scheduleCpuStatsUpdate: function() {
         setInterval(() => {
-            this.updateStats();
-        }, this.config.updateInterval);
+            this.updateCpuStats();
+        }, this.config.cpuUpdateInterval);
+    },
+
+    scheduleTempUpdate: function() {
+        setInterval(() => {
+            this.updateCpuTemp();
+        }, this.config.tempUpdateInterval);
     },
 
     getDom: function() {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Bar (overall) with percentage
+        // CPU Usage Display
         let cpuUsageWrapper = document.createElement("div");
         cpuUsageWrapper.className = "cpu-usage";
-        let titleCpu = document.createElement("h2");
-        titleCpu.innerHTML = `CPU Usage: ${this.stats.cpuUsage}%`;
+        let titleCpu = document.createElement("div");
+        titleCpu.innerHTML = `CPU Usage: <strong>${this.stats.cpuUsage}%</strong>`;
         let cpuBar = document.createElement("progress");
         cpuBar.value = this.stats.cpuUsage;
         cpuBar.max = 100;
         cpuUsageWrapper.appendChild(titleCpu);
         cpuUsageWrapper.appendChild(cpuBar);
 
-        // CPU Temperature
+        // CPU Temperature Display
         let cpuTempWrapper = document.createElement("div");
         cpuTempWrapper.className = "cpu-temp";
-        let titleTemp = document.createElement("h2");
-        titleTemp.innerHTML = `CPU Temperature: ${this.stats.cpuTemp}°C`;
+        let titleTemp = document.createElement("div");
+        titleTemp.innerHTML = `CPU Temp: <strong>${this.stats.cpuTemp}°C</strong>`;
         cpuTempWrapper.appendChild(titleTemp);
 
-        // RAM Usage Bar
+        // RAM Usage Display in GB
         let ramUsageWrapper = document.createElement("div");
         ramUsageWrapper.className = "ram-usage";
-        let titleRam = document.createElement("h2");
-        titleRam.innerHTML = `RAM Usage: ${this.stats.totalRam - this.stats.freeRam}MB/${this.stats.totalRam}MB`;
-        let ramBar = document.createElement("progress");
-        ramBar.value = (this.stats.totalRam - this.stats.freeRam);
-        ramBar.max = this.stats.totalRam;
+        let totalRamGB = this.stats.totalRam;
+        let usedRamGB = (this.stats.totalRam - this.stats.freeRam).toFixed(2);
+        let titleRam = document.createElement("div");
+        titleRam.innerHTML = `RAM Usage: <strong>${usedRamGB}GB / ${totalRamGB}GB</strong>`;
         ramUsageWrapper.appendChild(titleRam);
-        ramUsageWrapper.appendChild(ramBar);
 
         // Append all elements to the main wrapper
         wrapper.appendChild(cpuUsageWrapper);
@@ -66,8 +77,14 @@ Module.register("MMM-SystemStats", {
     },
 
     socketNotificationReceived: function(notification, payload) {
-        if (notification === "SYSTEM_STATS") {
-            this.stats = payload;
+        if (notification === "CPU_USAGE") {
+            this.stats.cpuUsage = payload.cpuUsage;
+            this.updateDom();
+        }
+        if (notification === "CPU_TEMP") {
+            this.stats.cpuTemp = payload.cpuTemp;
+            this.stats.totalRam = payload.totalRam;
+            this.stats.freeRam = payload.freeRam;
             this.updateDom();
         }
     }

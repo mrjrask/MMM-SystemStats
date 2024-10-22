@@ -1,28 +1,38 @@
 .system-stats {
-    font-size: 20px; /* Make text larger */
+    font-size: 16px;
     text-align: left;
+    font-family: 'Arial', sans-serif;
+    color: #ffffff; /* Modern, clean text color */
 }
 
 .cpu-usage, .cpu-temp, .ram-usage {
-    margin: 5px 0; /* Reduce margin to bring elements closer together */
+    margin: 0;
+    padding: 5px 0; /* Remove excessive padding */
 }
 
 progress {
     width: 100%;
-    height: 20px;
-    background-color: #e0e0e0;
-    border: 1px solid #ccc;
-}
-
-h2 {
-    margin-bottom: 5px;
-    font-size: 22px;
+    height: 15px;
+    background-color: #333;
+    border-radius: 8px;
+    border: 1px solid #555;
 }
 
 progress::-webkit-progress-value {
-    background-color: #4CAF50; /* Green bar for usage */
+    background-color: #4CAF50; /* Sleek green bar for CPU usage */
+    border-radius: 8px;
 }
 
 progress::-moz-progress-bar {
-    background-color: #4CAF50; /* Green bar for usage */
+    background-color: #4CAF50;
+    border-radius: 8px;
+}
+
+strong {
+    color: #4CAF50; /* Green for emphasized text */
+    font-weight: bold;
+}
+
+div {
+    margin: 2px 0; /* Remove space between lines */
 }
