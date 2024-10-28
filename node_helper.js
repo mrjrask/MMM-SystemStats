@@ -1,6 +1,8 @@
+
 const NodeHelper = require("node_helper");
 const { exec } = require("child_process");
 const os = require("os");
+const fs = require("fs");
 
 module.exports = NodeHelper.create({
     start: function() {
@@ -20,8 +22,6 @@ module.exports = NodeHelper.create({
 
     // Function to calculate CPU usage from /proc/stat
     getCpuUsage: function() {
-        const fs = require("fs");
-
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
@@ -46,37 +46,60 @@ module.exports = NodeHelper.create({
 
     // Function to get CPU temperature and RAM usage
     getCpuTempAndRam: function() {
+        // First, try using the vcgencmd command to get the temperature
         exec("/opt/vc/bin/vcgencmd measure_temp", (err, stdout, stderr) => {
             if (err || stderr || !stdout) {
-                console.error("Error getting CPU temperature:", err || stderr);
-                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
-                return;
+                console.error("Error getting CPU temperature with vcgencmd:", err || stderr);
+                // If vcgencmd is not available, try a fallback method
+                this.getFallbackCpuTemp();
+            } else {
+                const temp = parseFloat(stdout.split("=")[1]);
+                if (isNaN(temp)) {
+                    console.error("Error parsing CPU temperature with vcgencmd.");
+                    this.getFallbackCpuTemp();
+                } else {
+                    this.sendCpuTempAndRam(temp.toFixed(1));
+                }
             }
-
-            // Log the output of vcgencmd to check if it's returning anything
-            console.log("vcgencmd output:", stdout);
-
-            const temp = parseFloat(stdout.split("=")[1]);
-            if (isNaN(temp)) {
-                console.error("Error parsing CPU temperature");
-                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
-                return;
-            }
-
-            // Get RAM usage
-            const totalRam = os.totalmem() / (1024 * 1024); // Convert to MB
-            const freeRam = os.freemem() / (1024 * 1024); // Convert to MB
-
-            // Log RAM values to check for any issues
-            console.log("Total RAM (MB):", totalRam);
-            console.log("Free RAM (MB):", freeRam);
-
-            // Send CPU temperature and RAM details back to the frontend
-            this.sendSocketNotification("CPU_TEMP", {
-                cpuTemp: temp.toFixed(1),  // Round to 1 decimal place
-                totalRam: totalRam.toFixed(2),  // Convert to GB, round to 2 decimal places
-                freeRam: freeRam.toFixed(2)  // Convert to GB, round to 2 decimal places
-            });
         });
+    },
+
+    // Fallback method to get CPU temperature (for devices without vcgencmd)
+    getFallbackCpuTemp: function() {
+        fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
+            if (err) {
+                console.error("Error reading fallback CPU temperature:", err);
+                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
+            } else {
+                const temp = parseFloat(data) / 1000; // Convert millidegree to degree
+                if (isNaN(temp)) {
+                    console.error("Error parsing fallback CPU temperature.");
+                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
+                } else {
+                    this.sendCpuTempAndRam(temp.toFixed(1));
+                }
+            }
+        });
+    },
+
+    // Helper function to send CPU temp and RAM values
+    sendCpuTempAndRam: function(cpuTemp) {
+        const totalRam = os.totalmem() / (1024 * 1024 * 1024); // Convert to GB
+        const freeRam = os.freemem() / (1024 * 1024 * 1024);   // Convert to GB
+
+        // Log the RAM values for debugging purposes
+        console.log("Total RAM (GB):", totalRam);
+        console.log("Free RAM (GB):", freeRam);
+
+        if (isNaN(totalRam) || isNaN(freeRam)) {
+            console.error("Error fetching RAM information.");
+            this.sendSocketNotification("CPU_TEMP", { cpuTemp, totalRam: "N/A", freeRam: "N/A" });
+        } else {
+            this.sendSocketNotification("CPU_TEMP", {
+                cpuTemp,
+                totalRam: totalRam.toFixed(2),
+                freeRam: freeRam.toFixed(2)
+            });
+        }
     }
 });
