@@ -51,12 +51,16 @@ module.exports = NodeHelper.create({
                 console.error("Error reading fallback CPU temperature:", err);
                 this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
             } else {
-                const temp = parseFloat(data) / 1000; // Convert millidegree to degree
-                if (isNaN(temp)) {
+                const tempC = parseFloat(data) / 1000; // Convert millidegree to degree Celsius
+                const tempF = (tempC * 9/5) + 32;      // Convert Celsius to Fahrenheit
+                if (isNaN(tempC)) {
                     console.error("Error parsing fallback CPU temperature.");
-                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
+                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
                 } else {
-                    this.sendCpuTempAndRam(temp.toFixed(1));
+                    this.sendSocketNotification("CPU_TEMP", {
+                        cpuTemp: tempC.toFixed(1),
+                        cpuTempF: tempF.toFixed(1)
+                    });
                 }
             }
         });
