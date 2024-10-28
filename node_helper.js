@@ -6,8 +6,6 @@ const fs = require("fs");
 module.exports = NodeHelper.create({
     start: function() {
         console.log("Starting node_helper for: " + this.name);
-        this.lastTotal = 0;
-        this.lastIdle = 0;
     },
 
     socketNotificationReceived: function(notification) {
@@ -16,6 +14,9 @@ module.exports = NodeHelper.create({
         }
         if (notification === "GET_CPU_TEMP") {
             this.getCpuTempAndRam();
+        }
+        if (notification === "GET_RAM_USAGE") {
+            this.getRamUsage();
         }
     },
 
@@ -61,8 +62,8 @@ module.exports = NodeHelper.create({
         });
     },
 
-    // Helper function to send CPU temp and RAM values (now calculating Used and Free memory)
-    sendCpuTempAndRam: function(cpuTemp) {
+    // Function to calculate RAM usage
+    getRamUsage: function() {
         const totalRamBytes = os.totalmem();
         const freeRamBytes = os.freemem();
 
@@ -70,20 +71,9 @@ module.exports = NodeHelper.create({
         const usedRamGB = (totalRamBytes - freeRamBytes) / (1024 * 1024 * 1024);
         const freeRamGB = freeRamBytes / (1024 * 1024 * 1024);
 
-        // Log the RAM values for debugging purposes
-        console.log("Used RAM (GB):", usedRamGB);
-        console.log("Free RAM (GB):", freeRamGB);
-
-        // Check for NaN values and handle them gracefully
-        if (isNaN(usedRamGB) || isNaN(freeRamGB)) {
-            console.error("Error fetching RAM information.");
-            this.sendSocketNotification("CPU_TEMP", { cpuTemp, usedRam: "N/A", freeRam: "N/A" });
-        } else {
-            this.sendSocketNotification("CPU_TEMP", {
-                cpuTemp,
-                usedRam: usedRamGB.toFixed(2),
-                freeRam: freeRamGB.toFixed(2)
-            });
-        }
+        this.sendSocketNotification("RAM_USAGE", {
+            usedRam: usedRamGB.toFixed(2),
+            freeRam: freeRamGB.toFixed(2)
+        });
     }
 });
