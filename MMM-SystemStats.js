@@ -1,7 +1,7 @@
 Module.register("MMM-SystemStats", {
     defaults: {
-        cpuUpdateInterval: 1000, // CPU usage update every 1 second
-        tempUpdateInterval: 30000, // CPU temperature update every 30 seconds
+        cpuUpdateInterval: 750,     // CPU usage and temperature update every 0.75 seconds
+        ramUpdateInterval: 10000,   // RAM usage update every 10 seconds
     },
 
     start: function() {
@@ -13,8 +13,10 @@ Module.register("MMM-SystemStats", {
         };
         this.updateCpuStats();
         this.updateCpuTemp();
+        this.updateRamStats();
         this.scheduleCpuStatsUpdate();
         this.scheduleTempUpdate();
+        this.scheduleRamUpdate();
     },
 
     updateCpuStats: function() {
@@ -23,6 +25,10 @@ Module.register("MMM-SystemStats", {
 
     updateCpuTemp: function() {
         this.sendSocketNotification("GET_CPU_TEMP");
+    },
+
+    updateRamStats: function() {
+        this.sendSocketNotification("GET_RAM_USAGE");
     },
 
     scheduleCpuStatsUpdate: function() {
@@ -34,7 +40,13 @@ Module.register("MMM-SystemStats", {
     scheduleTempUpdate: function() {
         setInterval(() => {
             this.updateCpuTemp();
-        }, this.config.tempUpdateInterval);
+        }, this.config.cpuUpdateInterval); // Use the same interval for CPU temp as CPU usage
+    },
+
+    scheduleRamUpdate: function() {
+        setInterval(() => {
+            this.updateRamStats();
+        }, this.config.ramUpdateInterval);
     },
 
     getDom: function() {
@@ -62,7 +74,6 @@ Module.register("MMM-SystemStats", {
         // RAM Usage Display (Used and Free memory in GB)
         let ramUsageWrapper = document.createElement("div");
         let titleRam = document.createElement("div");
-        // Hardcoded "8GB RAM" label
         titleRam.innerHTML = `8GB RAM: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
         ramUsageWrapper.appendChild(titleRam);
 
@@ -81,6 +92,9 @@ Module.register("MMM-SystemStats", {
         }
         if (notification === "CPU_TEMP") {
             this.stats.cpuTemp = payload.cpuTemp;
+            this.updateDom();
+        }
+        if (notification === "RAM_USAGE") {
             this.stats.usedRam = payload.usedRam;
             this.stats.freeRam = payload.freeRam;
             this.updateDom();
