@@ -62,7 +62,8 @@ Module.register("MMM-SystemStats", {
         // RAM Usage Display (Used and Free memory in GB)
         let ramUsageWrapper = document.createElement("div");
         let titleRam = document.createElement("div");
-        titleRam.innerHTML = `RAM Usage: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
+        // Hardcoded "8GB RAM" label
+        titleRam.innerHTML = `8GB RAM: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
         ramUsageWrapper.appendChild(titleRam);
 
         // Append all elements to the main wrapper
