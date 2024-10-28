@@ -1,4 +1,3 @@
-
 const NodeHelper = require("node_helper");
 const { exec } = require("child_process");
 const os = require("os");
@@ -46,26 +45,6 @@ module.exports = NodeHelper.create({
 
     // Function to get CPU temperature and RAM usage
     getCpuTempAndRam: function() {
-        // First, try using the vcgencmd command to get the temperature
-        exec("/opt/vc/bin/vcgencmd measure_temp", (err, stdout, stderr) => {
-            if (err || stderr || !stdout) {
-                console.error("Error getting CPU temperature with vcgencmd:", err || stderr);
-                // If vcgencmd is not available, try a fallback method
-                this.getFallbackCpuTemp();
-            } else {
-                const temp = parseFloat(stdout.split("=")[1]);
-                if (isNaN(temp)) {
-                    console.error("Error parsing CPU temperature with vcgencmd.");
-                    this.getFallbackCpuTemp();
-                } else {
-                    this.sendCpuTempAndRam(temp.toFixed(1));
-                }
-            }
-        });
-    },
-
-    // Fallback method to get CPU temperature (for devices without vcgencmd)
-    getFallbackCpuTemp: function() {
         fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading fallback CPU temperature:", err);
@@ -82,23 +61,28 @@ module.exports = NodeHelper.create({
         });
     },
 
-    // Helper function to send CPU temp and RAM values
+    // Helper function to send CPU temp and RAM values (now calculating Used and Free memory)
     sendCpuTempAndRam: function(cpuTemp) {
-        const totalRam = os.totalmem() / (1024 * 1024 * 1024); // Convert to GB
-        const freeRam = os.freemem() / (1024 * 1024 * 1024);   // Convert to GB
+        const totalRamBytes = os.totalmem();
+        const freeRamBytes = os.freemem();
+
+        // Calculate Used RAM (Total - Free) and convert to GB
+        const usedRamGB = (totalRamBytes - freeRamBytes) / (1024 * 1024 * 1024);
+        const freeRamGB = freeRamBytes / (1024 * 1024 * 1024);
 
         // Log the RAM values for debugging purposes
-        console.log("Total RAM (GB):", totalRam);
-        console.log("Free RAM (GB):", freeRam);
+        console.log("Used RAM (GB):", usedRamGB);
+        console.log("Free RAM (GB):", freeRamGB);
 
-        if (isNaN(totalRam) || isNaN(freeRam)) {
+        // Check for NaN values and handle them gracefully
+        if (isNaN(usedRamGB) || isNaN(freeRamGB)) {
             console.error("Error fetching RAM information.");
-            this.sendSocketNotification("CPU_TEMP", { cpuTemp, totalRam: "N/A", freeRam: "N/A" });
+            this.sendSocketNotification("CPU_TEMP", { cpuTemp, usedRam: "N/A", freeRam: "N/A" });
         } else {
             this.sendSocketNotification("CPU_TEMP", {
                 cpuTemp,
-                totalRam: totalRam.toFixed(2),
-                freeRam: freeRam.toFixed(2)
+                usedRam: usedRamGB.toFixed(2),
+                freeRam: freeRamGB.toFixed(2)
             });
         }
     }

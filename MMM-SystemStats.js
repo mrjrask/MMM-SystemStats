@@ -8,7 +8,7 @@ Module.register("MMM-SystemStats", {
         this.stats = {
             cpuUsage: 0,
             cpuTemp: "N/A",
-            totalRam: 0,
+            usedRam: 0,
             freeRam: 0
         };
         this.updateCpuStats();
@@ -59,13 +59,10 @@ Module.register("MMM-SystemStats", {
         titleTemp.innerHTML = `CPU Temp: <strong>${this.stats.cpuTemp}°C</strong>`;
         cpuTempWrapper.appendChild(titleTemp);
 
-        // RAM Usage Display in GB
+        // RAM Usage Display (Used and Free memory in GB)
         let ramUsageWrapper = document.createElement("div");
-        ramUsageWrapper.className = "ram-usage";
-        let totalRamGB = this.stats.totalRam;
-        let usedRamGB = (this.stats.totalRam - this.stats.freeRam).toFixed(2);
         let titleRam = document.createElement("div");
-        titleRam.innerHTML = `RAM Usage: <strong>${usedRamGB}GB / ${totalRamGB}GB</strong>`;
+        titleRam.innerHTML = `RAM Usage: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
         ramUsageWrapper.appendChild(titleRam);
 
         // Append all elements to the main wrapper
@@ -83,7 +80,7 @@ Module.register("MMM-SystemStats", {
         }
         if (notification === "CPU_TEMP") {
             this.stats.cpuTemp = payload.cpuTemp;
-            this.stats.totalRam = payload.totalRam;
+            this.stats.usedRam = payload.usedRam;
             this.stats.freeRam = payload.freeRam;
             this.updateDom();
         }
