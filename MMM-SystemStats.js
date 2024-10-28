@@ -1,6 +1,6 @@
 Module.register("MMM-SystemStats", {
     defaults: {
-        cpuUpdateInterval: 750,     // CPU usage and temperature update every 0.75 seconds
+        cpuUpdateInterval: 1000,     // CPU usage and temperature update every 1 second
         ramUpdateInterval: 10000,   // RAM usage update every 10 seconds
     },
 
@@ -68,7 +68,8 @@ Module.register("MMM-SystemStats", {
         let cpuTempWrapper = document.createElement("div");
         cpuTempWrapper.className = "cpu-temp";
         let titleTemp = document.createElement("div");
-        titleTemp.innerHTML = `CPU Temp: <strong>${this.stats.cpuTemp}°C</strong>`;
+        // Format temperature as ºC / ºF
+        titleTemp.innerHTML = `CPU Temp: <strong>${this.stats.cpuTemp}ºC / ${this.stats.cpuTempF}ºF</strong>`;
         cpuTempWrapper.appendChild(titleTemp);
 
         // RAM Usage Display (Used and Free memory in GB)
@@ -92,6 +93,7 @@ Module.register("MMM-SystemStats", {
         }
         if (notification === "CPU_TEMP") {
             this.stats.cpuTemp = payload.cpuTemp;
+            this.stats.cpuTempF = payload.cpuTempF;  // Fahrenheit value passed from the backend
             this.updateDom();
         }
         if (notification === "RAM_USAGE") {
