@@ -18,6 +18,9 @@ module.exports = NodeHelper.create({
         if (notification === "GET_RAM_USAGE") {
             this.getRamUsage();
         }
+        if (notification === "GET_DISK_USAGE") {
+            this.getDiskUsage();
+        }
     },
 
     // Function to calculate CPU usage from /proc/stat
@@ -49,7 +52,7 @@ module.exports = NodeHelper.create({
         fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading fallback CPU temperature:", err);
-                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A" });
+                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
             } else {
                 const tempC = parseFloat(data) / 1000; // Convert millidegree to degree Celsius
                 const tempF = (tempC * 9/5) + 32;      // Convert Celsius to Fahrenheit
@@ -78,6 +81,28 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification("RAM_USAGE", {
             usedRam: usedRamGB.toFixed(2),
             freeRam: freeRamGB.toFixed(2)
+        });
+    },
+
+    // Function to get Disk Usage using the "df" command
+    getDiskUsage: function() {
+        exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
+            if (err) {
+                console.error("Error fetching disk usage:", err);
+                return;
+            }
+
+            const lines = stdout.trim().split('\n');
+            if (lines.length >= 2) {
+                const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
+                const driveCapacity = diskInfo[1];  // Size of the drive
+                const freeSpace = diskInfo[2];      // Free space
+
+                this.sendSocketNotification("DISK_USAGE", {
+                    driveCapacity: driveCapacity,
+                    freeSpace: freeSpace
+                });
+            }
         });
     }
 });
