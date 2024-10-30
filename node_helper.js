@@ -6,11 +6,13 @@ const fs = require("fs");
 module.exports = NodeHelper.create({
     start: function() {
         console.log("Starting node_helper for: " + this.name);
+        this.lastIdle = [];
+        this.lastTotal = [];
     },
 
     socketNotificationReceived: function(notification) {
         if (notification === "GET_CPU_USAGE") {
-            this.getCpuUsage();
+            this.getPerCoreCpuUsage();
         }
         if (notification === "GET_CPU_TEMP") {
             this.getCpuTempAndRam();
@@ -23,27 +25,38 @@ module.exports = NodeHelper.create({
         }
     },
 
-    // Function to calculate CPU usage from /proc/stat
-    getCpuUsage: function() {
+    // Function to calculate per-core CPU usage from /proc/stat
+    getPerCoreCpuUsage: function() {
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
                 return;
             }
 
-            const cpuData = data.split('\n')[0].replace(/ +/g, ' ').split(' ');
-            const idle = parseInt(cpuData[4]);
-            const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
+            const lines = data.split('\n');
+            const cpuUsages = [];
 
-            const idleDiff = idle - this.lastIdle;
-            const totalDiff = total - this.lastTotal;
+            for (let i = 0; i < 4; i++) {
+                const cpuData = lines[i + 1].replace(/ +/g, ' ').split(' ');
+                const idle = parseInt(cpuData[4]);
+                const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
 
-            const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
+                if (!this.lastIdle[i]) {
+                    this.lastIdle[i] = idle;
+                    this.lastTotal[i] = total;
+                }
 
-            this.lastIdle = idle;
-            this.lastTotal = total;
+                const idleDiff = idle - this.lastIdle[i];
+                const totalDiff = total - this.lastTotal[i];
+                const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
 
-            this.sendSocketNotification("CPU_USAGE", { cpuUsage });
+                this.lastIdle[i] = idle;
+                this.lastTotal[i] = total;
+
+                cpuUsages.push(cpuUsage);
+            }
+
+            this.sendSocketNotification("CPU_USAGE", { cpuUsages });
         });
     },
 
@@ -95,8 +108,8 @@ module.exports = NodeHelper.create({
             const lines = stdout.trim().split('\n');
             if (lines.length >= 2) {
                 const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
-                const driveCapacity = diskInfo[1];  // Size of the drive
-                const freeSpace = diskInfo[2];      // Free space
+                const driveCapacity = diskInfo[1].replace("G", "GB");  // Fix to show "GB"
+                const freeSpace = diskInfo[2].replace("G", "GB");      // Fix to show "GB"
 
                 this.sendSocketNotification("DISK_USAGE", {
                     driveCapacity: driveCapacity,
