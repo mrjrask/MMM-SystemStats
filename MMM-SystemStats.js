@@ -14,7 +14,7 @@ Module.register("MMM-SystemStats", {
 
     start: function() {
         this.stats = {
-            cpuUsages: [0, 0, 0, 0],  // For four CPU cores
+            cpuUsage: 0,  
             cpuTemp: "N/A",
             cpuTempF: "N/A",
             usedRam: 0,
@@ -84,20 +84,18 @@ Module.register("MMM-SystemStats", {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Display (Per-Core)
+        // CPU Usage Display (Single Bar)
         if (this.config.showCpuUsage) {
-            for (let i = 0; i < 4; i++) {
-                let cpuUsageWrapper = document.createElement("div");
-                cpuUsageWrapper.className = "cpu-usage";
-                let titleCpu = document.createElement("div");
-                titleCpu.innerHTML = `Core ${i}: <strong>${this.stats.cpuUsages[i]}%</strong>`;
-                let cpuBar = document.createElement("progress");
-                cpuBar.value = this.stats.cpuUsages[i];
-                cpuBar.max = 100;
-                cpuUsageWrapper.appendChild(titleCpu);
-                cpuUsageWrapper.appendChild(cpuBar);
-                wrapper.appendChild(cpuUsageWrapper);
-            }
+            let cpuUsageWrapper = document.createElement("div");
+            cpuUsageWrapper.className = "cpu-usage";
+            let titleCpu = document.createElement("div");
+            titleCpu.innerHTML = `CPU Usage: <strong>${this.stats.cpuUsage}%</strong>`;
+            let cpuBar = document.createElement("progress");
+            cpuBar.value = this.stats.cpuUsage;
+            cpuBar.max = 100;
+            cpuUsageWrapper.appendChild(titleCpu);
+            cpuUsageWrapper.appendChild(cpuBar);
+            wrapper.appendChild(cpuUsageWrapper);
         }
 
         // CPU Temperature Display (both Celsius and Fahrenheit)
@@ -143,7 +141,7 @@ Module.register("MMM-SystemStats", {
 
     socketNotificationReceived: function(notification, payload) {
         if (notification === "CPU_USAGE") {
-            this.stats.cpuUsages = payload.cpuUsages;
+            this.stats.cpuUsage = payload.cpuUsage;
             this.updateDom();
         }
         if (notification === "CPU_TEMP") {
