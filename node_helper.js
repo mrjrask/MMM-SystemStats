@@ -6,13 +6,13 @@ const fs = require("fs");
 module.exports = NodeHelper.create({
     start: function() {
         console.log("Starting node_helper for: " + this.name);
-        this.lastIdle = [];
-        this.lastTotal = [];
+        this.lastIdle = 0;
+        this.lastTotal = 0;
     },
 
     socketNotificationReceived: function(notification) {
         if (notification === "GET_CPU_USAGE") {
-            this.getPerCoreCpuUsage();
+            this.getCpuUsage();
         }
         if (notification === "GET_CPU_TEMP") {
             this.getCpuTempAndRam();
@@ -25,38 +25,27 @@ module.exports = NodeHelper.create({
         }
     },
 
-    // Function to calculate per-core CPU usage from /proc/stat
-    getPerCoreCpuUsage: function() {
+    // Function to calculate overall CPU usage from /proc/stat
+    getCpuUsage: function() {
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
                 return;
             }
 
-            const lines = data.split('\n');
-            const cpuUsages = [];
+            const cpuData = data.split('\n')[0].replace(/ +/g, ' ').split(' ');
+            const idle = parseInt(cpuData[4]);
+            const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
 
-            for (let i = 0; i < 4; i++) {
-                const cpuData = lines[i + 1].replace(/ +/g, ' ').split(' ');
-                const idle = parseInt(cpuData[4]);
-                const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
+            const idleDiff = idle - this.lastIdle;
+            const totalDiff = total - this.lastTotal;
 
-                if (!this.lastIdle[i]) {
-                    this.lastIdle[i] = idle;
-                    this.lastTotal[i] = total;
-                }
+            const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
 
-                const idleDiff = idle - this.lastIdle[i];
-                const totalDiff = total - this.lastTotal[i];
-                const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
+            this.lastIdle = idle;
+            this.lastTotal = total;
 
-                this.lastIdle[i] = idle;
-                this.lastTotal[i] = total;
-
-                cpuUsages.push(cpuUsage);
-            }
-
-            this.sendSocketNotification("CPU_USAGE", { cpuUsages });
+            this.sendSocketNotification("CPU_USAGE", { cpuUsage });
         });
     },
 
