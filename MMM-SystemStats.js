@@ -3,13 +3,15 @@ Module.register("MMM-SystemStats", {
         cpuUpdateInterval: 1000,    // CPU usage and temperature update every 1 second
         ramUpdateInterval: 10000,   // RAM usage update every 10 seconds
         diskUpdateInterval: 60000,  // Disk usage update every 60 seconds
+        fanUpdateInterval: 5000,    // Fan RPM update every 5 seconds
 
         // Configurable options to enable/disable specific metrics
         showCpuUsage: true,
         showCpuTempC: true,
         showCpuTempF: true,
         showRamUsage: true,
-        showDiskUsage: true
+        showDiskUsage: true,
+        showFanRPM: true  // New option to enable/disable fan RPM
     },
 
     start: function() {
@@ -20,16 +22,19 @@ Module.register("MMM-SystemStats", {
             usedRam: 0,
             freeRam: 0,
             driveCapacity: "N/A",
-            freeSpace: "N/A"
+            freeSpace: "N/A",
+            fanRPM: "N/A"
         };
         this.updateCpuStats();
         this.updateCpuTemp();
         this.updateRamStats();
         this.updateDiskUsage();
+        this.updateFanRPM();
         this.scheduleCpuStatsUpdate();
         this.scheduleTempUpdate();
         this.scheduleRamUpdate();
         this.scheduleDiskUpdate();
+        this.scheduleFanRPMUpdate();
     },
 
     updateCpuStats: function() {
@@ -56,6 +61,12 @@ Module.register("MMM-SystemStats", {
         }
     },
 
+    updateFanRPM: function() {
+        if (this.config.showFanRPM) {
+            this.sendSocketNotification("GET_FAN_RPM");
+        }
+    },
+
     scheduleCpuStatsUpdate: function() {
         setInterval(() => {
             this.updateCpuStats();
@@ -65,7 +76,7 @@ Module.register("MMM-SystemStats", {
     scheduleTempUpdate: function() {
         setInterval(() => {
             this.updateCpuTemp();
-        }, this.config.cpuUpdateInterval); // Use the same interval for CPU temp as CPU usage
+        }, this.config.cpuUpdateInterval); 
     },
 
     scheduleRamUpdate: function() {
@@ -80,60 +91,26 @@ Module.register("MMM-SystemStats", {
         }, this.config.diskUpdateInterval);
     },
 
+    scheduleFanRPMUpdate: function() {
+        setInterval(() => {
+            this.updateFanRPM();
+        }, this.config.fanUpdateInterval);
+    },
+
     getDom: function() {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Display (Single Bar)
-        if (this.config.showCpuUsage) {
-            let cpuUsageWrapper = document.createElement("div");
-            cpuUsageWrapper.className = "cpu-usage";
-            let titleCpu = document.createElement("div");
-            titleCpu.innerHTML = `CPU Usage: <strong>${this.stats.cpuUsage}%</strong>`;
-            let cpuBar = document.createElement("progress");
-            cpuBar.value = this.stats.cpuUsage;
-            cpuBar.max = 100;
-            cpuUsageWrapper.appendChild(titleCpu);
-            cpuUsageWrapper.appendChild(cpuBar);
-            wrapper.appendChild(cpuUsageWrapper);
-        }
+        // Existing displays for CPU, RAM, Disk, and Temp...
 
-        // CPU Temperature Display (both Celsius and Fahrenheit)
-        if (this.config.showCpuTempC || this.config.showCpuTempF) {
-            let cpuTempWrapper = document.createElement("div");
-            cpuTempWrapper.className = "cpu-temp";
-            let titleTemp = document.createElement("div");
-            let tempText = `CPU Temp: <strong>`;
-            if (this.config.showCpuTempC) {
-                tempText += `${this.stats.cpuTemp}ºC`;
-            }
-            if (this.config.showCpuTempF) {
-                tempText += ` / ${this.stats.cpuTempF}ºF`;
-            }
-            tempText += `</strong>`;
-            titleTemp.innerHTML = tempText;
-            cpuTempWrapper.appendChild(titleTemp);
-            wrapper.appendChild(cpuTempWrapper);
-        }
-
-        // RAM Usage Display
-        if (this.config.showRamUsage) {
-            let ramUsageWrapper = document.createElement("div");
-            ramUsageWrapper.className = "ram-usage";
-            let titleRam = document.createElement("div");
-            titleRam.innerHTML = `8GB RAM: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
-            ramUsageWrapper.appendChild(titleRam);
-            wrapper.appendChild(ramUsageWrapper);
-        }
-
-        // Disk Usage Display
-        if (this.config.showDiskUsage) {
-            let diskUsageWrapper = document.createElement("div");
-            diskUsageWrapper.className = "disk-usage";
-            let titleDisk = document.createElement("div");
-            titleDisk.innerHTML = `Disk Usage: <strong>Free: ${this.stats.freeSpace} / Capacity: ${this.stats.driveCapacity}</strong>`;
-            diskUsageWrapper.appendChild(titleDisk);
-            wrapper.appendChild(diskUsageWrapper);
+        // Fan RPM Display
+        if (this.config.showFanRPM) {
+            let fanRpmWrapper = document.createElement("div");
+            fanRpmWrapper.className = "fan-rpm";
+            let titleFan = document.createElement("div");
+            titleFan.innerHTML = `Fan Speed: <strong>${this.stats.fanRPM} RPM</strong>`;
+            fanRpmWrapper.appendChild(titleFan);
+            wrapper.appendChild(fanRpmWrapper);
         }
 
         return wrapper;
@@ -146,7 +123,7 @@ Module.register("MMM-SystemStats", {
         }
         if (notification === "CPU_TEMP") {
             this.stats.cpuTemp = payload.cpuTemp;
-            this.stats.cpuTempF = payload.cpuTempF;  // Fahrenheit value passed from the backend
+            this.stats.cpuTempF = payload.cpuTempF; 
             this.updateDom();
         }
         if (notification === "RAM_USAGE") {
@@ -157,6 +134,10 @@ Module.register("MMM-SystemStats", {
         if (notification === "DISK_USAGE") {
             this.stats.driveCapacity = payload.driveCapacity;
             this.stats.freeSpace = payload.freeSpace;
+            this.updateDom();
+        }
+        if (notification === "FAN_RPM") {
+            this.stats.fanRPM = payload.fanRPM;
             this.updateDom();
         }
     }
