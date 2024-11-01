@@ -2,38 +2,12 @@ const NodeHelper = require("node_helper");
 const { exec } = require("child_process");
 const os = require("os");
 const fs = require("fs");
-const Gpio = require("onoff").Gpio;  // Import the onoff library for GPIO
 
 module.exports = NodeHelper.create({
     start: function() {
         console.log("Starting node_helper for: " + this.name);
-
         this.lastIdle = 0;
         this.lastTotal = 0;
-
-        // Set up the RPM reading GPIO pin (Assuming tachometer pin is GPIO 13)
-        this.fanRPM = 0;
-        this.pulseCount = 0;
-        this.RPM_GPIO = new Gpio(13, 'in', 'rising');  // GPIO 13 for RPM reading
-        this.RPM_GPIO.watch((err, value) => {
-            if (err) {
-                console.error("Error reading RPM:", err);
-                return;
-            }
-            this.pulseCount += 1;  // Increment pulse count on each rising edge
-        });
-
-        // Set an interval to calculate RPM
-        this.calculateRPMInterval = setInterval(this.calculateRPM.bind(this), 5000);  // Calculate every 5 seconds
-    },
-
-    // Calculate RPM based on pulse count
-    calculateRPM: function() {
-        // Each pulse corresponds to half a revolution, so divide by 2
-        const revolutions = this.pulseCount / 2;
-        this.fanRPM = Math.round((revolutions / 5) * 60);  // Extrapolate to RPM
-        this.pulseCount = 0;  // Reset pulse count after each calculation
-        this.sendSocketNotification("FAN_RPM", { fanRPM: this.fanRPM });
     },
 
     socketNotificationReceived: function(notification) {
@@ -51,8 +25,9 @@ module.exports = NodeHelper.create({
         }
     },
 
-    // Function to calculate overall CPU usage
+    // Function to calculate overall CPU usage from /proc/stat
     getCpuUsage: function() {
+        console.log("Fetching CPU usage...");
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
@@ -72,16 +47,72 @@ module.exports = NodeHelper.create({
             this.lastTotal = total;
 
             this.sendSocketNotification("CPU_USAGE", { cpuUsage });
+            console.log("CPU usage fetched successfully.");
         });
     },
 
-    // Other functions for CPU temp, RAM, and disk usage...
+    // Function to get CPU temperature and RAM usage
+    getCpuTempAndRam: function() {
+        console.log("Fetching CPU temperature...");
+        fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
+            if (err) {
+                console.error("Error reading CPU temperature:", err);
+                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+            } else {
+                const tempC = parseFloat(data) / 1000; // Convert millidegree to degree Celsius
+                const tempF = (tempC * 9/5) + 32;      // Convert Celsius to Fahrenheit
+                if (isNaN(tempC)) {
+                    console.error("Error parsing CPU temperature.");
+                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+                } else {
+                    this.sendSocketNotification("CPU_TEMP", {
+                        cpuTemp: tempC.toFixed(1),
+                        cpuTempF: tempF.toFixed(1)
+                    });
+                    console.log("CPU temperature fetched successfully.");
+                }
+            }
+        });
+    },
 
-    stop: function() {
-        // Clean up GPIO on exit
-        if (this.RPM_GPIO) {
-            this.RPM_GPIO.unexport();
-        }
-        clearInterval(this.calculateRPMInterval);
+    // Function to calculate RAM usage
+    getRamUsage: function() {
+        console.log("Fetching RAM usage...");
+        const totalRamBytes = os.totalmem();
+        const freeRamBytes = os.freemem();
+
+        // Calculate Used RAM (Total - Free) and convert to GB
+        const usedRamGB = (totalRamBytes - freeRamBytes) / (1024 * 1024 * 1024);
+        const freeRamGB = freeRamBytes / (1024 * 1024 * 1024);
+
+        this.sendSocketNotification("RAM_USAGE", {
+            usedRam: usedRamGB.toFixed(2),
+            freeRam: freeRamGB.toFixed(2)
+        });
+        console.log("RAM usage fetched successfully.");
+    },
+
+    // Function to get Disk Usage using the "df" command
+    getDiskUsage: function() {
+        console.log("Fetching Disk usage...");
+        exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
+            if (err) {
+                console.error("Error fetching disk usage:", err);
+                return;
+            }
+
+            const lines = stdout.trim().split('\n');
+            if (lines.length >= 2) {
+                const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
+                const driveCapacity = diskInfo[1].replace("G", "GB");  // Fix to show "GB"
+                const freeSpace = diskInfo[2].replace("G", "GB");      // Fix to show "GB"
+
+                this.sendSocketNotification("DISK_USAGE", {
+                    driveCapacity: driveCapacity,
+                    freeSpace: freeSpace
+                });
+                console.log("Disk usage fetched successfully.");
+            }
+        });
     }
 });
