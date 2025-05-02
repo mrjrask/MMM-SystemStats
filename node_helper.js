@@ -27,7 +27,7 @@ module.exports = NodeHelper.create({
 
     // Function to calculate overall CPU usage from /proc/stat
     getCpuUsage: function() {
-        console.log("Fetching CPU usage...");
+//        console.log("Fetching CPU usage...");
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
