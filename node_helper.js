@@ -1,62 +1,118 @@
 const NodeHelper = require("node_helper");
-const moment     = require("moment");
-const fs         = require("fs");
-
-console.log("[MMM-MLBScoresAndStandings] helper started");
+const { exec } = require("child_process");
+const os = require("os");
+const fs = require("fs");
 
 module.exports = NodeHelper.create({
-  start() {
-    this.games  = [];
-    this.config = {};
-  },
+    start: function() {
+        console.log("Starting node_helper for: " + this.name);
+        this.lastIdle = 0;
+        this.lastTotal = 0;
+    },
 
-  socketNotificationReceived(notification, payload) {
-    if (notification === "INIT") {
-      this.config = payload;
-      this.fetchData();
-      this.fetchStandingsFromFile();
-      this.scheduleFetch();
+    socketNotificationReceived: function(notification) {
+        if (notification === "GET_CPU_USAGE") {
+            this.getCpuUsage();
+        }
+        if (notification === "GET_CPU_TEMP") {
+            this.getCpuTempAndRam();
+        }
+        if (notification === "GET_RAM_USAGE") {
+            this.getRamUsage();
+        }
+        if (notification === "GET_DISK_USAGE") {
+            this.getDiskUsage();
+        }
+    },
+
+    // Function to calculate overall CPU usage from /proc/stat
+    getCpuUsage: function() {
+//        console.log("Fetching CPU usage...");
+        fs.readFile('/proc/stat', 'utf8', (err, data) => {
+            if (err) {
+                console.error("Error reading /proc/stat:", err);
+                return;
+            }
+
+            const cpuData = data.split('\n')[0].replace(/ +/g, ' ').split(' ');
+            const idle = parseInt(cpuData[4]);
+            const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
+
+            const idleDiff = idle - this.lastIdle;
+            const totalDiff = total - this.lastTotal;
+
+            const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
+
+            this.lastIdle = idle;
+            this.lastTotal = total;
+
+            this.sendSocketNotification("CPU_USAGE", { cpuUsage });
+//            console.log("CPU usage fetched successfully.");
+        });
+    },
+
+    // Function to get CPU temperature and RAM usage
+    getCpuTempAndRam: function() {
+//        console.log("Fetching CPU temperature...");
+        fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
+            if (err) {
+                console.error("Error reading CPU temperature:", err);
+                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+            } else {
+                const tempC = parseFloat(data) / 1000; // Convert millidegree to degree Celsius
+                const tempF = (tempC * 9/5) + 32;      // Convert Celsius to Fahrenheit
+                if (isNaN(tempC)) {
+                    console.error("Error parsing CPU temperature.");
+                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+                } else {
+                    this.sendSocketNotification("CPU_TEMP", {
+                        cpuTemp: tempC.toFixed(1),
+                        cpuTempF: tempF.toFixed(1)
+                    });
+//                    console.log("CPU temperature fetched successfully.");
+                }
+            }
+        });
+    },
+
+    // Function to calculate RAM usage
+    getRamUsage: function() {
+//        console.log("Fetching RAM usage...");
+        const totalRamBytes = os.totalmem();
+        const freeRamBytes = os.freemem();
+
+        // Calculate Used RAM (Total - Free) and convert to GB
+        const usedRamGB = (totalRamBytes - freeRamBytes) / (1024 * 1024 * 1024);
+        const freeRamGB = freeRamBytes / (1024 * 1024 * 1024);
+
+        this.sendSocketNotification("RAM_USAGE", {
+            usedRam: usedRamGB.toFixed(2),
+            freeRam: freeRamGB.toFixed(2)
+        });
+//        console.log("RAM usage fetched successfully.");
+    },
+
+    // Function to get Disk Usage using the "df" command
+    getDiskUsage: function() {
+//        console.log("Fetching Disk usage...");
+        exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
+            if (err) {
+                console.error("Error fetching disk usage:", err);
+                return;
+            }
+
+            const lines = stdout.trim().split('\n');
+            if (lines.length >= 2) {
+                const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
+                const driveCapacity = diskInfo[1].replace("G", "GB");  // Fix to show "GB"
+                const freeSpace = diskInfo[2].replace("G", "GB");      // Fix to show "GB"
+
+                this.sendSocketNotification("DISK_USAGE", {
+                    driveCapacity: driveCapacity,
+                    freeSpace: freeSpace
+                });
+ //               console.log("Disk usage fetched successfully.");
+            }
+        });
     }
-  },
-
-  scheduleFetch() {
-    setInterval(
-      () => this.fetchData(),
-      this.config.updateIntervalScores
-    );
-    setInterval(
-      () => this.fetchStandingsFromFile(),
-      this.config.updateIntervalStandings
-    );
-  },
-
-  async fetchData() {
-    const date = moment().format("YYYY-MM-DD");
-    const url  = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=linescore`;
-    try {
-      console.log("[MMM] fetching schedule URL:", url);
-      const res  = await fetch(url);
-      const json = await res.json();
-      this.games = json.dates?.[0]?.games || [];
-      console.log("[MMM-MLBScoresAndStandings] fetched games:", this.games.length);
-      this.sendSocketNotification("GAMES", this.games);
-    } catch (e) {
-      console.error("[MMM-MLBScoresAndStandings] fetchData error", e);
-      this.sendSocketNotification("GAMES", []);
-    }
-  },
-
-  fetchStandingsFromFile() {
-    const filePath = __dirname + "/standings.json";
-    console.log("[MMM] reading standings from file:", filePath);
-    try {
-      const data    = fs.readFileSync(filePath, "utf8");
-      const records = JSON.parse(data);
-      console.log("[MMM-MLBScoresAndStandings] loaded standings from file:", records.length);
-      this.sendSocketNotification("STANDINGS", records);
-    } catch (e) {
-      console.error("[MMM-MLBScoresAndStandings] read standings file error", e);
-      this.sendSocketNotification("STANDINGS", []);
-    }
-  }
 });
