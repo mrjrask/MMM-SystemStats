@@ -47,13 +47,13 @@ module.exports = NodeHelper.create({
             this.lastTotal = total;
 
             this.sendSocketNotification("CPU_USAGE", { cpuUsage });
-            console.log("CPU usage fetched successfully.");
+//            console.log("CPU usage fetched successfully.");
         });
     },
 
     // Function to get CPU temperature and RAM usage
     getCpuTempAndRam: function() {
-        console.log("Fetching CPU temperature...");
+//        console.log("Fetching CPU temperature...");
         fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading CPU temperature:", err);
@@ -69,7 +69,7 @@ module.exports = NodeHelper.create({
                         cpuTemp: tempC.toFixed(1),
                         cpuTempF: tempF.toFixed(1)
                     });
-                    console.log("CPU temperature fetched successfully.");
+//                    console.log("CPU temperature fetched successfully.");
                 }
             }
         });
@@ -77,7 +77,7 @@ module.exports = NodeHelper.create({
 
     // Function to calculate RAM usage
     getRamUsage: function() {
-        console.log("Fetching RAM usage...");
+//        console.log("Fetching RAM usage...");
         const totalRamBytes = os.totalmem();
         const freeRamBytes = os.freemem();
 
@@ -89,12 +89,12 @@ module.exports = NodeHelper.create({
             usedRam: usedRamGB.toFixed(2),
             freeRam: freeRamGB.toFixed(2)
         });
-        console.log("RAM usage fetched successfully.");
+//        console.log("RAM usage fetched successfully.");
     },
 
     // Function to get Disk Usage using the "df" command
     getDiskUsage: function() {
-        console.log("Fetching Disk usage...");
+//        console.log("Fetching Disk usage...");
         exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
             if (err) {
                 console.error("Error fetching disk usage:", err);
@@ -111,7 +111,7 @@ module.exports = NodeHelper.create({
                     driveCapacity: driveCapacity,
                     freeSpace: freeSpace
                 });
-                console.log("Disk usage fetched successfully.");
+ //               console.log("Disk usage fetched successfully.");
             }
         });
     }
