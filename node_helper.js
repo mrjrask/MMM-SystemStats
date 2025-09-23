@@ -8,9 +8,22 @@ module.exports = NodeHelper.create({
         console.log("Starting node_helper for: " + this.name);
         this.lastIdle = 0;
         this.lastTotal = 0;
+
+        // NEW: keep ping scheduling state
+        this.pingConfig = {
+            pingHost: "1.1.1.1",
+            pingCount: 1,
+            pingIntervalMin: 10,
+            pingIntervalMax: 30
+        };
+        this._pingTimer = null;
     },
 
-    socketNotificationReceived: function(notification) {
+    stop: function () {
+        if (this._pingTimer) clearTimeout(this._pingTimer);
+    },
+
+    socketNotificationReceived: function(notification, payload) {
         if (notification === "GET_CPU_USAGE") {
             this.getCpuUsage();
         }
@@ -23,11 +36,16 @@ module.exports = NodeHelper.create({
         if (notification === "GET_DISK_USAGE") {
             this.getDiskUsage();
         }
+
+        // NEW: accept ping config from front-end and (re)start ping loop
+        if (notification === "PING_CONFIG") {
+            this.pingConfig = Object.assign({}, this.pingConfig, payload || {});
+            this._scheduleNextPing(); // kicks off randomized loop
+        }
     },
 
     // Function to calculate overall CPU usage from /proc/stat
     getCpuUsage: function() {
-//        console.log("Fetching CPU usage...");
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
@@ -47,13 +65,11 @@ module.exports = NodeHelper.create({
             this.lastTotal = total;
 
             this.sendSocketNotification("CPU_USAGE", { cpuUsage });
-//            console.log("CPU usage fetched successfully.");
         });
     },
 
     // Function to get CPU temperature and RAM usage
     getCpuTempAndRam: function() {
-//        console.log("Fetching CPU temperature...");
         fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
             if (err) {
                 console.error("Error reading CPU temperature:", err);
@@ -69,7 +85,6 @@ module.exports = NodeHelper.create({
                         cpuTemp: tempC.toFixed(1),
                         cpuTempF: tempF.toFixed(1)
                     });
-//                    console.log("CPU temperature fetched successfully.");
                 }
             }
         });
@@ -77,7 +92,6 @@ module.exports = NodeHelper.create({
 
     // Function to calculate RAM usage
     getRamUsage: function() {
-//        console.log("Fetching RAM usage...");
         const totalRamBytes = os.totalmem();
         const freeRamBytes = os.freemem();
 
@@ -89,12 +103,10 @@ module.exports = NodeHelper.create({
             usedRam: usedRamGB.toFixed(2),
             freeRam: freeRamGB.toFixed(2)
         });
-//        console.log("RAM usage fetched successfully.");
     },
 
     // Function to get Disk Usage using the "df" command
     getDiskUsage: function() {
-//        console.log("Fetching Disk usage...");
         exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
             if (err) {
                 console.error("Error fetching disk usage:", err);
@@ -111,8 +123,60 @@ module.exports = NodeHelper.create({
                     driveCapacity: driveCapacity,
                     freeSpace: freeSpace
                 });
- //               console.log("Disk usage fetched successfully.");
             }
+        });
+    },
+
+    // ───── NEW: Ping support ────────────────────────────────────────────────
+    _scheduleNextPing: function () {
+        if (this._pingTimer) {
+            clearTimeout(this._pingTimer);
+            this._pingTimer = null;
+        }
+        const minS = Math.max(1, Number(this.pingConfig.pingIntervalMin) || 10);
+        const maxS = Math.max(minS, Number(this.pingConfig.pingIntervalMax) || 30);
+        const delayMs = Math.floor(minS * 1000 + Math.random() * ((maxS - minS) * 1000));
+
+        this._pingTimer = setTimeout(() => this._performPing(), delayMs);
+    },
+
+    _performPing: function () {
+        const host = this.pingConfig.pingHost || "1.1.1.1";
+        const count = Math.max(1, parseInt(this.pingConfig.pingCount, 10) || 1);
+
+        // -n (numeric), -q (summary), -c <count>: works on Linux/macOS
+        const cmd = `ping -n -q -c ${count} ${host}`;
+
+        exec(cmd, { timeout: Math.max(5000, 2000 * count) }, (error, stdout, stderr) => {
+            let avg = null;
+            const out = `${stdout || ""}\n${stderr || ""}`;
+
+            // Linux: "rtt min/avg/max/mdev = 13.456/15.789/..."
+            // BSD/macOS: "round-trip min/avg/max/stddev = 13.456/15.789/..."
+            const matchLinux = out.match(/rtt [^=]*=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/);
+            const matchBSD   = out.match(/round-trip [^=]*=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/);
+            const m = matchLinux || matchBSD;
+
+            if (m && m[2]) {
+                const v = parseFloat(m[2]);
+                avg = Number.isNaN(v) ? null : v;
+            } else {
+                // If count==1, some platforms only emit "time=XX ms"
+                const one = out.match(/time[=<]\s*([\d.]+)\s*ms/);
+                if (one && one[1]) {
+                    const v = parseFloat(one[1]);
+                    avg = Number.isNaN(v) ? null : v;
+                }
+            }
+
+            this.sendSocketNotification("PING_RESULT", {
+                host,
+                avgMs: avg,
+                error: error ? (error.message || "Ping failed") : null
+            });
+
+            // Schedule next randomized run
+            this._scheduleNextPing();
         });
     }
 });
