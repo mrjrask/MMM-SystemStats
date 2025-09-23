@@ -9,7 +9,7 @@ module.exports = NodeHelper.create({
         this.lastIdle = 0;
         this.lastTotal = 0;
 
-        // NEW: keep ping scheduling state
+        // Ping scheduling state + defaults
         this.pingConfig = {
             pingHost: "1.1.1.1",
             pingCount: 1,
@@ -37,14 +37,14 @@ module.exports = NodeHelper.create({
             this.getDiskUsage();
         }
 
-        // NEW: accept ping config from front-end and (re)start ping loop
+        // Accept ping config from front-end and (re)start ping loop
         if (notification === "PING_CONFIG") {
             this.pingConfig = Object.assign({}, this.pingConfig, payload || {});
             this._scheduleNextPing(); // kicks off randomized loop
         }
     },
 
-    // Function to calculate overall CPU usage from /proc/stat
+    // Calculate overall CPU usage from /proc/stat
     getCpuUsage: function() {
         fs.readFile('/proc/stat', 'utf8', (err, data) => {
             if (err) {
@@ -68,7 +68,7 @@ module.exports = NodeHelper.create({
         });
     },
 
-    // Function to get CPU temperature and RAM usage
+    // Get CPU temperature
     getCpuTempAndRam: function() {
         fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
             if (err) {
@@ -90,22 +90,23 @@ module.exports = NodeHelper.create({
         });
     },
 
-    // Function to calculate RAM usage
+    // Calculate RAM usage
     getRamUsage: function() {
         const totalRamBytes = os.totalmem();
         const freeRamBytes = os.freemem();
 
-        // Calculate Used RAM (Total - Free) and convert to GB
         const usedRamGB = (totalRamBytes - freeRamBytes) / (1024 * 1024 * 1024);
         const freeRamGB = freeRamBytes / (1024 * 1024 * 1024);
+        const totalRamGB = totalRamBytes / (1024 * 1024 * 1024);
 
         this.sendSocketNotification("RAM_USAGE", {
             usedRam: usedRamGB.toFixed(2),
-            freeRam: freeRamGB.toFixed(2)
+            freeRam: freeRamGB.toFixed(2),
+            totalRam: totalRamGB.toFixed(2)   // send total for nice label
         });
     },
 
-    // Function to get Disk Usage using the "df" command
+    // Disk Usage via df
     getDiskUsage: function() {
         exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
             if (err) {
@@ -116,8 +117,8 @@ module.exports = NodeHelper.create({
             const lines = stdout.trim().split('\n');
             if (lines.length >= 2) {
                 const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
-                const driveCapacity = diskInfo[1].replace("G", "GB");  // Fix to show "GB"
-                const freeSpace = diskInfo[2].replace("G", "GB");      // Fix to show "GB"
+                const driveCapacity = diskInfo[1].replace("G", "GB");
+                const freeSpace = diskInfo[2].replace("G", "GB");
 
                 this.sendSocketNotification("DISK_USAGE", {
                     driveCapacity: driveCapacity,
@@ -127,7 +128,7 @@ module.exports = NodeHelper.create({
         });
     },
 
-    // ───── NEW: Ping support ────────────────────────────────────────────────
+    // ───── Ping support (average shown when pingCount > 1) ──────────────────
     _scheduleNextPing: function () {
         if (this._pingTimer) {
             clearTimeout(this._pingTimer);
@@ -141,7 +142,8 @@ module.exports = NodeHelper.create({
     },
 
     _performPing: function () {
-        const host = this.pingConfig.pingHost || "1.1.1.1";
+        // Fallback host if pingHost is missing/empty → 8.8.8.8
+        const host = (this.pingConfig.pingHost && String(this.pingConfig.pingHost).trim()) ? this.pingConfig.pingHost : "8.8.8.8";
         const count = Math.max(1, parseInt(this.pingConfig.pingCount, 10) || 1);
 
         // -n (numeric), -q (summary), -c <count>: works on Linux/macOS
@@ -171,7 +173,7 @@ module.exports = NodeHelper.create({
 
             this.sendSocketNotification("PING_RESULT", {
                 host,
-                avgMs: avg,
+                avgMs: avg, // average across pingCount (or single value)
                 error: error ? (error.message || "Ping failed") : null
             });
 
