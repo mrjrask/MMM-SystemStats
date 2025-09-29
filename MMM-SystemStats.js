@@ -118,18 +118,29 @@ Module.register("MMM-SystemStats", {
     },
 
     // Nice total RAM label (512MB, 1GB, 2GB, 4GB, 8GB, 16GB, …)
+    // Round to the nearest "typical" Raspberry Pi size so an 8GB Pi that
+    // reports ~7.8GB (because of GPU reservation) still shows "8GB RAM".
     niceTotalRamLabel: function(totalRamGBFloat) {
-        const g = totalRamGBFloat;
-        if (!g || isNaN(g)) return "RAM";
-        if (g >= 64) return "64GB RAM";
-        if (g >= 32) return "32GB RAM";
-        if (g >= 16) return "16GB RAM";
-        if (g >= 8)  return "8GB RAM";
-        if (g >= 4)  return "4GB RAM";
-        if (g >= 2)  return "2GB RAM";
-        if (g >= 1)  return "1GB RAM";
-        if (g >= 0.5) return "512MB RAM";
-        return `${Math.round(g * 1024)}MB RAM`;
+        const g = Number(totalRamGBFloat);
+        if (!Number.isFinite(g) || g <= 0) return "RAM";
+
+        const knownSizes = [0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256];
+        let closest = knownSizes[0];
+        let smallestDiff = Math.abs(g - closest);
+
+        for (let i = 1; i < knownSizes.length; i++) {
+            const diff = Math.abs(g - knownSizes[i]);
+            if (diff < smallestDiff) {
+                smallestDiff = diff;
+                closest = knownSizes[i];
+            }
+        }
+
+        if (closest < 1) {
+            // Only known sub-1GB size we support is 512MB.
+            return "512MB RAM";
+        }
+        return `${Math.round(closest)}GB RAM`;
     },
 
     getDom: function() {
