@@ -36,3 +36,22 @@ strong {
 div {
     margin: 2px 0; /* Remove space between lines */
 }
+
+/* Temperature color coding styles */
+.temp-value {
+    font-weight: bold;
+}
+
+/* Pulsing animation for critical temperatures (80°C+) */
+.temp-critical {
+    animation: temp-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes temp-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}

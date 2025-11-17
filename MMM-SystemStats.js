@@ -117,6 +117,26 @@ Module.register("MMM-SystemStats", {
         return "#d00000";                    // red
     },
 
+    // Compute color for temperature (Celsius)
+    // Green (<50°C), Yellow-Green (50-60°C), Orange (60-70°C), Red (70-80°C), Purple (80°C+)
+    colorForTemp: function(tempC) {
+        // Parse temperature value (remove "N/A" or non-numeric values)
+        const temp = parseFloat(tempC);
+        if (isNaN(temp)) return "#4CAF50"; // Default green for N/A
+
+        if (temp < 50) return "#4CAF50";      // Green - Normal
+        if (temp < 60) return "#9ACD32";      // Yellow-Green - Warm
+        if (temp < 70) return "#FF8C00";      // Orange - Hot
+        if (temp < 80) return "#FF0000";      // Red - Very hot
+        return "#9932CC";                     // Purple - Critical
+    },
+
+    // Check if temperature is critical (80°C+) for pulsing animation
+    isTempCritical: function(tempC) {
+        const temp = parseFloat(tempC);
+        return !isNaN(temp) && temp >= 80;
+    },
+
     // Nice total RAM label (512MB, 1GB, 2GB, 4GB, 8GB, 16GB, …)
     // Round to the nearest "typical" Raspberry Pi size so an 8GB Pi that
     // reports ~7.8GB (because of GPU reservation) still shows "8GB RAM".
@@ -166,12 +186,18 @@ Module.register("MMM-SystemStats", {
             let cpuTempWrapper = document.createElement("div");
             cpuTempWrapper.className = "cpu-temp";
             let titleTemp = document.createElement("div");
+
+            // Determine color based on Celsius temperature
+            const tempColor = this.colorForTemp(this.stats.cpuTemp);
+            const isCritical = this.isTempCritical(this.stats.cpuTemp);
+            const pulseClass = isCritical ? ' temp-critical' : '';
+
             let tempText = `CPU Temp: <strong>`;
             if (this.config.showCpuTempC) {
-                tempText += `${this.stats.cpuTemp}ºC`;
+                tempText += `<span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTemp}ºC</span>`;
             }
             if (this.config.showCpuTempF) {
-                tempText += ` / ${this.stats.cpuTempF}ºF`;
+                tempText += ` / <span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTempF}ºF</span>`;
             }
             tempText += `</strong>`;
             titleTemp.innerHTML = tempText;
