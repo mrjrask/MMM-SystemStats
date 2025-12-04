@@ -11,12 +11,16 @@ Module.register("MMM-SystemStats", {
         ramUpdateInterval: 10000,   // RAM usage update every 10 seconds
         diskUpdateInterval: 60000,  // Disk usage update every 60 seconds
 
+        fanUpdateInterval: 10000,   // Fan tachometer update
+        fanHwmonPath: "",           // Optional explicit /sys/class/hwmon/.../fan*_input path
+
         // Configurable options to enable/disable specific metrics
         showCpuUsage: true,
         showCpuTempC: true,
         showCpuTempF: true,
         showRamUsage: true,
         showDiskUsage: true,
+        showFanSpeed: true,
 
         // Ping configuration (overridable in config.js)
         // Helper also has a fallback to 8.8.8.8 if this ends up empty/undefined.
@@ -37,7 +41,10 @@ Module.register("MMM-SystemStats", {
             driveCapacity: "N/A",
             freeSpace: "N/A",
             // Ping value; "N/A" until first result
-            pingMs: "N/A"
+            pingMs: "N/A",
+
+            // Fan tachometer
+            fanRpm: "N/A"
         };
 
         // Existing scheduling/initial kicks
@@ -45,10 +52,12 @@ Module.register("MMM-SystemStats", {
         this.updateCpuTemp();
         this.updateRamStats();
         this.updateDiskUsage();
+        this.requestFanTelemetry();
         this.scheduleCpuStatsUpdate();
         this.scheduleTempUpdate();
         this.scheduleRamUpdate();
         this.scheduleDiskUpdate();
+        this.scheduleFanUpdate();
 
         // Send ping config to node_helper and let helper schedule randomized loop
         this.sendSocketNotification("PING_CONFIG", {
@@ -83,6 +92,15 @@ Module.register("MMM-SystemStats", {
         }
     },
 
+    requestFanTelemetry: function() {
+        if (this.config.showFanSpeed) {
+            this.sendSocketNotification("GET_FAN_SPEED", {
+                fanUpdateInterval: this.config.fanUpdateInterval,
+                fanHwmonPath: this.config.fanHwmonPath
+            });
+        }
+    },
+
     scheduleCpuStatsUpdate: function() {
         setInterval(() => {
             this.updateCpuStats();
@@ -105,6 +123,12 @@ Module.register("MMM-SystemStats", {
         setInterval(() => {
             this.updateDiskUsage();
         }, this.config.diskUpdateInterval);
+    },
+
+    scheduleFanUpdate: function() {
+        setInterval(() => {
+            this.requestFanTelemetry();
+        }, this.config.fanUpdateInterval);
     },
 
     // Compute a readable color from ping ms (green=fast, red=slow)
@@ -227,6 +251,17 @@ Module.register("MMM-SystemStats", {
             wrapper.appendChild(diskUsageWrapper);
         }
 
+        // Fan speed (align styling with Ping line)
+        if (this.config.showFanSpeed) {
+            let fanWrapper = document.createElement("div");
+            fanWrapper.className = "fan-speed";
+            let titleFan = document.createElement("div");
+            const fanValue = (typeof this.stats.fanRpm === "number") ? `${this.stats.fanRpm} RPM` : this.stats.fanRpm;
+            titleFan.innerHTML = `Fan: <strong>${fanValue}</strong>`;
+            fanWrapper.appendChild(titleFan);
+            wrapper.appendChild(fanWrapper);
+        }
+
         // Ping line (single line, same style: label + <strong>value</strong>)
         // Always show if pingHost is configured; shows "N/A" until first result.
         if (this.config.pingHost || true) { // keep visible even if fallback is used in helper
@@ -278,6 +313,11 @@ Module.register("MMM-SystemStats", {
             } else {
                 this.stats.pingMs = "N/A";
             }
+            this.updateDom();
+        }
+
+        if (notification === "FAN_SPEED") {
+            this.stats.fanRpm = payload ? payload.rpm : "N/A";
             this.updateDom();
         }
     }

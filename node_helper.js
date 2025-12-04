@@ -2,6 +2,7 @@ const NodeHelper = require("node_helper");
 const { exec } = require("child_process");
 const os = require("os");
 const fs = require("fs");
+const path = require("path");
 
 module.exports = NodeHelper.create({
     start: function() {
@@ -17,10 +18,19 @@ module.exports = NodeHelper.create({
             pingIntervalMax: 30
         };
         this._pingTimer = null;
+
+        // Fan polling state
+        this.fanConfig = {
+            fanUpdateInterval: 10000,
+            fanHwmonPath: ""
+        };
+        this._fanTimer = null;
+        this._fanInputPath = null;
     },
 
     stop: function () {
         if (this._pingTimer) clearTimeout(this._pingTimer);
+        if (this._fanTimer) clearInterval(this._fanTimer);
     },
 
     socketNotificationReceived: function(notification, payload) {
@@ -35,6 +45,10 @@ module.exports = NodeHelper.create({
         }
         if (notification === "GET_DISK_USAGE") {
             this.getDiskUsage();
+        }
+
+        if (notification === "GET_FAN_SPEED") {
+            this._configureFanPolling(payload || {});
         }
 
         // Accept ping config from front-end and (re)start ping loop
@@ -180,5 +194,100 @@ module.exports = NodeHelper.create({
             // Schedule next randomized run
             this._scheduleNextPing();
         });
+    },
+
+    // ───── Fan speed telemetry (Raspberry Pi 5 PWM fan tachometer) ────────
+    _configureFanPolling: function (payload) {
+        const intervalMs = Math.max(500, Number(payload.fanUpdateInterval || this.fanConfig.fanUpdateInterval) || 10000);
+        const hwmonPath = payload.fanHwmonPath || this.fanConfig.fanHwmonPath || "";
+
+        let shouldRestart = false;
+        if (intervalMs !== this.fanConfig.fanUpdateInterval) {
+            this.fanConfig.fanUpdateInterval = intervalMs;
+            shouldRestart = true;
+        }
+        if (hwmonPath !== this.fanConfig.fanHwmonPath) {
+            this.fanConfig.fanHwmonPath = hwmonPath;
+            this._fanInputPath = null; // force rediscovery
+            shouldRestart = true;
+        }
+
+        if (shouldRestart || !this._fanTimer) {
+            if (this._fanTimer) clearInterval(this._fanTimer);
+            // Kick off immediately then on interval
+            this._pollFanSpeed();
+            this._fanTimer = setInterval(() => this._pollFanSpeed(), this.fanConfig.fanUpdateInterval);
+        }
+    },
+
+    _pollFanSpeed: function () {
+        const fanPath = this._getFanInputPath();
+
+        if (!fanPath) {
+            this.sendSocketNotification("FAN_SPEED", { rpm: "N/A" });
+            return;
+        }
+
+        fs.readFile(fanPath, "utf8", (err, data) => {
+            if (err) {
+                console.error("Error reading fan speed:", err.message || err);
+                // Force rediscovery on next tick in case hwmon index changed
+                this._fanInputPath = null;
+                this.sendSocketNotification("FAN_SPEED", { rpm: "N/A" });
+                return;
+            }
+
+            const raw = parseInt(String(data).trim(), 10);
+            const rpm = Number.isFinite(raw) ? raw : "N/A";
+            this.sendSocketNotification("FAN_SPEED", { rpm });
+        });
+    },
+
+    _getFanInputPath: function () {
+        // Preferred: explicit path supplied via config
+        if (this.fanConfig.fanHwmonPath) {
+            const direct = this.fanConfig.fanHwmonPath;
+            if (fs.existsSync(direct)) {
+                this._fanInputPath = direct;
+                return direct;
+            }
+        }
+
+        if (this._fanInputPath && fs.existsSync(this._fanInputPath)) {
+            return this._fanInputPath;
+        }
+
+        const base = "/sys/class/hwmon";
+        let hwmons = [];
+        try {
+            hwmons = fs.readdirSync(base);
+        } catch (err) {
+            console.error("Unable to read hwmon directory for fan telemetry:", err.message || err);
+            return null;
+        }
+
+        for (const entry of hwmons) {
+            const hwmonPath = path.join(base, entry);
+            const candidates = [hwmonPath, path.join(hwmonPath, "device")];
+
+            for (const dir of candidates) {
+                let files = [];
+                try {
+                    files = fs.readdirSync(dir);
+                } catch (err) {
+                    continue;
+                }
+
+                for (const file of files) {
+                    if (/^fan\d+_input$/.test(file)) {
+                        const fullPath = path.join(dir, file);
+                        this._fanInputPath = fullPath;
+                        return fullPath;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 });
