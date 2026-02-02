@@ -27,11 +27,7 @@ Module.register("MMM-SystemStats", {
         pingHost: "1.1.1.1",
         pingCount: 1,
         pingIntervalMin: 10,  // seconds (minimum)
-        pingIntervalMax: 30,  // seconds (maximum)
-
-        // Multi-device pagination
-        devicesPerPage: 4,
-        devicePageRotateInterval: 10000 // milliseconds
+        pingIntervalMax: 30   // seconds (maximum)
     },
 
     start: function() {
@@ -50,9 +46,6 @@ Module.register("MMM-SystemStats", {
             // Fan tachometer
             fanRpm: "N/A"
         };
-        this.deviceStats = [];
-        this.devicePage = 0;
-        this.devicePageTimer = null;
 
         // Existing scheduling/initial kicks
         this.updateCpuStats();
@@ -73,65 +66,6 @@ Module.register("MMM-SystemStats", {
             pingIntervalMin: this.config.pingIntervalMin,
             pingIntervalMax: this.config.pingIntervalMax
         });
-    },
-    getDevicesPerPage: function() {
-        const parsed = parseInt(this.config.devicesPerPage, 10);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
-    },
-
-    getTotalDevicePages: function() {
-        if (!this.deviceStats.length) return 0;
-        return Math.ceil(this.deviceStats.length / this.getDevicesPerPage());
-    },
-
-    setDeviceStats: function(devices) {
-        this.deviceStats = Array.isArray(devices) ? devices : [];
-        const totalPages = this.getTotalDevicePages();
-        if (this.devicePage >= totalPages) {
-            this.devicePage = Math.max(0, totalPages - 1);
-        }
-        this.scheduleDevicePagination();
-        this.updateDom();
-    },
-
-    scheduleDevicePagination: function() {
-        if (this.devicePageTimer) {
-            clearInterval(this.devicePageTimer);
-            this.devicePageTimer = null;
-        }
-        const totalPages = this.getTotalDevicePages();
-        if (totalPages > 1) {
-            this.devicePageTimer = setInterval(() => {
-                this.devicePage = (this.devicePage + 1) % totalPages;
-                this.updateDom();
-            }, Math.max(1000, Number(this.config.devicePageRotateInterval) || 10000));
-        }
-    },
-
-    formatDeviceValue: function(value, suffix) {
-        if (value === null || value === undefined || value === "") return "N/A";
-        if (typeof value === "number") {
-            return suffix ? `${value}${suffix}` : `${value}`;
-        }
-        return `${value}${suffix || ""}`;
-    },
-
-    formatDeviceRam: function(device) {
-        const used = device.usedRam ?? device.ramUsed;
-        const free = device.freeRam ?? device.ramFree;
-        if (used === undefined || free === undefined) {
-            return "N/A";
-        }
-        return `${used}GB / ${free}GB`;
-    },
-
-    formatDeviceDisk: function(device) {
-        const free = device.freeSpace ?? device.diskFree ?? device.freeDisk;
-        const capacity = device.driveCapacity ?? device.diskCapacity ?? device.totalDisk;
-        if (free === undefined || capacity === undefined) {
-            return "N/A";
-        }
-        return `${free} / ${capacity}`;
     },
 
     updateCpuStats: function() {
@@ -256,61 +190,6 @@ Module.register("MMM-SystemStats", {
     getDom: function() {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
-
-        if (this.deviceStats.length > 0) {
-            const devicesPerPage = this.getDevicesPerPage();
-            const totalPages = this.getTotalDevicePages();
-            const pageIndex = Math.min(this.devicePage, Math.max(0, totalPages - 1));
-            const startIndex = pageIndex * devicesPerPage;
-            const pageDevices = this.deviceStats.slice(startIndex, startIndex + devicesPerPage);
-
-            const table = document.createElement("table");
-            table.className = "device-table";
-            const thead = document.createElement("thead");
-            const headRow = document.createElement("tr");
-            ["Device", "CPU", "Temp", "RAM", "Disk", "Ping", "Fan"].forEach((label) => {
-                const th = document.createElement("th");
-                th.textContent = label;
-                headRow.appendChild(th);
-            });
-            thead.appendChild(headRow);
-            table.appendChild(thead);
-
-            const tbody = document.createElement("tbody");
-            pageDevices.forEach((device) => {
-                const row = document.createElement("tr");
-                const deviceName = device.name || device.deviceName || device.hostname || "Device";
-                const cpuUsage = this.formatDeviceValue(device.cpuUsage ?? device.cpu, "%");
-                const tempC = this.formatDeviceValue(device.cpuTemp ?? device.tempC ?? device.temperature, "ºC");
-                const ramText = this.formatDeviceRam(device);
-                const diskText = this.formatDeviceDisk(device);
-                const ping = this.formatDeviceValue(device.pingMs ?? device.avgPingMs ?? device.ping, " ms");
-                const fan = this.formatDeviceValue(device.fanRpm ?? device.fan, " RPM");
-
-                [deviceName, cpuUsage, tempC, ramText, diskText, ping, fan].forEach((value) => {
-                    const cell = document.createElement("td");
-                    cell.textContent = value;
-                    row.appendChild(cell);
-                });
-
-                tbody.appendChild(row);
-            });
-            table.appendChild(tbody);
-            wrapper.appendChild(table);
-
-            if (totalPages > 1) {
-                const dots = document.createElement("div");
-                dots.className = "page-dots";
-                for (let i = 0; i < totalPages; i++) {
-                    const dot = document.createElement("span");
-                    dot.className = `page-dot${i === pageIndex ? " is-active" : ""}`;
-                    dots.appendChild(dot);
-                }
-                wrapper.appendChild(dots);
-            }
-
-            return wrapper;
-        }
 
         // CPU Usage Display
         if (this.config.showCpuUsage) {
@@ -440,16 +319,6 @@ Module.register("MMM-SystemStats", {
         if (notification === "FAN_SPEED") {
             this.stats.fanRpm = payload ? payload.rpm : "N/A";
             this.updateDom();
-        }
-
-        if (notification === "DEVICE_STATS") {
-            if (Array.isArray(payload)) {
-                this.setDeviceStats(payload);
-            } else if (payload && Array.isArray(payload.devices)) {
-                this.setDeviceStats(payload.devices);
-            } else {
-                this.setDeviceStats([]);
-            }
         }
     }
 });
