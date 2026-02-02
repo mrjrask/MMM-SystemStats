@@ -37,6 +37,41 @@ div {
     margin: 2px 0; /* Remove space between lines */
 }
 
+.device-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+}
+
+.device-table th,
+.device-table td {
+    padding: 4px 6px;
+    text-align: left;
+    font-size: 14px;
+}
+
+.device-table thead tr {
+    border-bottom: 1px solid #555;
+}
+
+.page-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.page-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #555;
+}
+
+.page-dot.is-active {
+    background-color: #4CAF50;
+}
+
 /* Temperature color coding styles */
 .temp-value {
     font-weight: bold;
