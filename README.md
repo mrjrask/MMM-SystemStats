@@ -6,6 +6,7 @@ A MagicMirror module to display CPU usage, temperature, and memory usage in real
   module: "MMM-SystemStats",
   position: "top_right",
   config: {
-    updateInterval: 5000 // in milliseconds
+    updateInterval: 5000, // in milliseconds
+    devicesPerPage: 4 // optional: override default devices per page for pagination
   }
 }
