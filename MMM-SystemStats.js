@@ -252,7 +252,7 @@ Module.register("MMM-SystemStats", {
         }
 
         // Fan speed (align styling with Ping line)
-        if (this.config.showFanSpeed) {
+        if (this.config.showFanSpeed && this.stats.fanRpm !== "N/A") {
             let fanWrapper = document.createElement("div");
             fanWrapper.className = "fan-speed";
             let titleFan = document.createElement("div");
