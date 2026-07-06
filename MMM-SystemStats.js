@@ -1,7 +1,5 @@
 /* MMM-SystemStats.js
- * A MagicMirror module to display CPU, RAM, temp, disk usage … plus Ping (ms).
- * Minimal change: adds ONE new line for "Ping:" while preserving original layout,
- * and shows a nice rounded total RAM label.
+ * A MagicMirror module to display CPU, RAM, temperature, disk, fan, and ping telemetry.
  */
 /* global Module */
 
@@ -10,6 +8,9 @@ Module.register("MMM-SystemStats", {
         cpuUpdateInterval: 1000,    // CPU usage and temperature update every 1 second
         ramUpdateInterval: 10000,   // RAM usage update every 10 seconds
         diskUpdateInterval: 60000,  // Disk usage update every 60 seconds
+
+        cpuTempPath: "/sys/class/thermal/thermal_zone0/temp",
+        diskMount: "/",
 
         fanUpdateInterval: 10000,   // Fan tachometer update
         fanHwmonPath: "",           // Optional explicit /sys/class/hwmon/.../fan*_input path
@@ -21,6 +22,7 @@ Module.register("MMM-SystemStats", {
         showRamUsage: true,
         showDiskUsage: true,
         showFanSpeed: true,
+        showPing: true,
 
         // Ping configuration (overridable in config.js)
         // Helper also has a fallback to 8.8.8.8 if this ends up empty/undefined.
@@ -31,23 +33,21 @@ Module.register("MMM-SystemStats", {
     },
 
     start: function() {
+        this.timers = [];
         this.stats = {
-            cpuUsage: 0,
+            cpuUsage: "N/A",
             cpuTemp: "N/A",
             cpuTempF: "N/A",
             usedRam: 0,
             freeRam: 0,
-            totalRam: 0,      // in GB (float)
+            totalRam: 0,
             driveCapacity: "N/A",
             freeSpace: "N/A",
-            // Ping value; "N/A" until first result
+            diskMount: this.config.diskMount,
             pingMs: "N/A",
-
-            // Fan tachometer
             fanRpm: "N/A"
         };
 
-        // Existing scheduling/initial kicks
         this.updateCpuStats();
         this.updateCpuTemp();
         this.updateRamStats();
@@ -58,9 +58,55 @@ Module.register("MMM-SystemStats", {
         this.scheduleRamUpdate();
         this.scheduleDiskUpdate();
         this.scheduleFanUpdate();
+        this.configurePing();
+    },
 
-        // Send ping config to node_helper and let helper schedule randomized loop
+    suspend: function() {
+        this.clearTimers();
+    },
+
+    resume: function() {
+        this.clearTimers();
+        this.scheduleCpuStatsUpdate();
+        this.scheduleTempUpdate();
+        this.scheduleRamUpdate();
+        this.scheduleDiskUpdate();
+        this.scheduleFanUpdate();
+        this.configurePing();
+    },
+
+    clearTimers: function() {
+        if (!this.timers) {
+            this.timers = [];
+            return;
+        }
+        this.timers.forEach((timer) => clearInterval(timer));
+        this.timers = [];
+    },
+
+    normalizeInterval: function(value, fallback, minimum) {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            return Math.max(fallback, minimum);
+        }
+        return Math.max(parsed, minimum);
+    },
+
+    addTimer: function(callback, value, fallback, minimum) {
+        const interval = this.normalizeInterval(value, fallback, minimum);
+        const timer = setInterval(callback, interval);
+        this.timers.push(timer);
+        return timer;
+    },
+
+    configurePing: function() {
+        if (!this.config.showPing) {
+            this.sendSocketNotification("PING_CONFIG", { enabled: false });
+            return;
+        }
+
         this.sendSocketNotification("PING_CONFIG", {
+            enabled: true,
             pingHost: this.config.pingHost,
             pingCount: this.config.pingCount,
             pingIntervalMin: this.config.pingIntervalMin,
@@ -76,7 +122,9 @@ Module.register("MMM-SystemStats", {
 
     updateCpuTemp: function() {
         if (this.config.showCpuTempC || this.config.showCpuTempF) {
-            this.sendSocketNotification("GET_CPU_TEMP");
+            this.sendSocketNotification("GET_CPU_TEMP", {
+                cpuTempPath: this.config.cpuTempPath
+            });
         }
     },
 
@@ -88,7 +136,9 @@ Module.register("MMM-SystemStats", {
 
     updateDiskUsage: function() {
         if (this.config.showDiskUsage) {
-            this.sendSocketNotification("GET_DISK_USAGE");
+            this.sendSocketNotification("GET_DISK_USAGE", {
+                diskMount: this.config.diskMount
+            });
         }
     },
 
@@ -102,68 +152,49 @@ Module.register("MMM-SystemStats", {
     },
 
     scheduleCpuStatsUpdate: function() {
-        setInterval(() => {
-            this.updateCpuStats();
-        }, this.config.cpuUpdateInterval);
+        this.addTimer(() => this.updateCpuStats(), this.config.cpuUpdateInterval, 1000, 500);
     },
 
     scheduleTempUpdate: function() {
-        setInterval(() => {
-            this.updateCpuTemp();
-        }, this.config.cpuUpdateInterval);
+        this.addTimer(() => this.updateCpuTemp(), this.config.cpuUpdateInterval, 1000, 500);
     },
 
     scheduleRamUpdate: function() {
-        setInterval(() => {
-            this.updateRamStats();
-        }, this.config.ramUpdateInterval);
+        this.addTimer(() => this.updateRamStats(), this.config.ramUpdateInterval, 10000, 1000);
     },
 
     scheduleDiskUpdate: function() {
-        setInterval(() => {
-            this.updateDiskUsage();
-        }, this.config.diskUpdateInterval);
+        this.addTimer(() => this.updateDiskUsage(), this.config.diskUpdateInterval, 60000, 10000);
     },
 
     scheduleFanUpdate: function() {
-        setInterval(() => {
-            this.requestFanTelemetry();
-        }, this.config.fanUpdateInterval);
+        this.addTimer(() => this.requestFanTelemetry(), this.config.fanUpdateInterval, 10000, 1000);
     },
 
-    // Compute a readable color from ping ms (green=fast, red=slow)
-    // Thresholds: <=20ms green, 21–50 yellow, 51–100 orange, >100 red.
     colorForPing: function(ms) {
         if (typeof ms !== "number" || isNaN(ms)) return "";
-        if (ms <= 20) return "#00a000";      // green
-        if (ms <= 50) return "#c0a000";      // yellow-ish
-        if (ms <= 100) return "#d07a00";     // orange
-        return "#d00000";                    // red
+        if (ms <= 20) return "#00a000";
+        if (ms <= 50) return "#c0a000";
+        if (ms <= 100) return "#d07a00";
+        return "#d00000";
     },
 
-    // Compute color for temperature (Celsius)
-    // Green (<50°C), Yellow-Green (50-60°C), Orange (60-70°C), Red (70-80°C), Purple (80°C+)
     colorForTemp: function(tempC) {
-        // Parse temperature value (remove "N/A" or non-numeric values)
         const temp = parseFloat(tempC);
-        if (isNaN(temp)) return "#4CAF50"; // Default green for N/A
+        if (isNaN(temp)) return "#4CAF50";
 
-        if (temp < 50) return "#4CAF50";      // Green - Normal
-        if (temp < 60) return "#9ACD32";      // Yellow-Green - Warm
-        if (temp < 70) return "#FF8C00";      // Orange - Hot
-        if (temp < 80) return "#FF0000";      // Red - Very hot
-        return "#9932CC";                     // Purple - Critical
+        if (temp < 50) return "#4CAF50";
+        if (temp < 60) return "#9ACD32";
+        if (temp < 70) return "#FF8C00";
+        if (temp < 80) return "#FF0000";
+        return "#9932CC";
     },
 
-    // Check if temperature is critical (80°C+) for pulsing animation
     isTempCritical: function(tempC) {
         const temp = parseFloat(tempC);
         return !isNaN(temp) && temp >= 80;
     },
 
-    // Nice total RAM label (512MB, 1GB, 2GB, 4GB, 8GB, 16GB, …)
-    // Round to the nearest "typical" Raspberry Pi size so an 8GB Pi that
-    // reports ~7.8GB (because of GPU reservation) still shows "8GB RAM".
     niceTotalRamLabel: function(totalRamGBFloat) {
         const g = Number(totalRamGBFloat);
         if (!Number.isFinite(g) || g <= 0) return "RAM";
@@ -181,7 +212,6 @@ Module.register("MMM-SystemStats", {
         }
 
         if (closest < 1) {
-            // Only known sub-1GB size we support is 512MB.
             return "512MB RAM";
         }
         return `${Math.round(closest)}GB RAM`;
@@ -191,45 +221,43 @@ Module.register("MMM-SystemStats", {
         let wrapper = document.createElement("div");
         wrapper.className = "system-stats";
 
-        // CPU Usage Display
         if (this.config.showCpuUsage) {
             let cpuUsageWrapper = document.createElement("div");
             cpuUsageWrapper.className = "cpu-usage";
             let titleCpu = document.createElement("div");
-            titleCpu.innerHTML = `CPU Usage: <strong>${this.stats.cpuUsage}%</strong>`;
+            const cpuUsage = Number(this.stats.cpuUsage);
+            const cpuLabel = Number.isFinite(cpuUsage) ? `${cpuUsage}%` : "N/A";
+            titleCpu.innerHTML = `CPU Usage: <strong>${cpuLabel}</strong>`;
             let cpuBar = document.createElement("progress");
-            cpuBar.value = this.stats.cpuUsage;
+            cpuBar.value = Number.isFinite(cpuUsage) ? cpuUsage : 0;
             cpuBar.max = 100;
             cpuUsageWrapper.appendChild(titleCpu);
             cpuUsageWrapper.appendChild(cpuBar);
             wrapper.appendChild(cpuUsageWrapper);
         }
 
-        // CPU Temperature Display (both Celsius and Fahrenheit)
         if (this.config.showCpuTempC || this.config.showCpuTempF) {
             let cpuTempWrapper = document.createElement("div");
             cpuTempWrapper.className = "cpu-temp";
             let titleTemp = document.createElement("div");
 
-            // Determine color based on Celsius temperature
             const tempColor = this.colorForTemp(this.stats.cpuTemp);
             const isCritical = this.isTempCritical(this.stats.cpuTemp);
-            const pulseClass = isCritical ? ' temp-critical' : '';
+            const pulseClass = isCritical ? " temp-critical" : "";
 
-            let tempText = `CPU Temp: <strong>`;
+            let tempText = "CPU Temp: <strong>";
             if (this.config.showCpuTempC) {
                 tempText += `<span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTemp}ºC</span>`;
             }
             if (this.config.showCpuTempF) {
                 tempText += ` / <span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTempF}ºF</span>`;
             }
-            tempText += `</strong>`;
+            tempText += "</strong>";
             titleTemp.innerHTML = tempText;
             cpuTempWrapper.appendChild(titleTemp);
             wrapper.appendChild(cpuTempWrapper);
         }
 
-        // RAM Usage Display (with nice total RAM label)
         if (this.config.showRamUsage) {
             let ramUsageWrapper = document.createElement("div");
             ramUsageWrapper.className = "ram-usage";
@@ -241,17 +269,15 @@ Module.register("MMM-SystemStats", {
             wrapper.appendChild(ramUsageWrapper);
         }
 
-        // Disk Usage Display
         if (this.config.showDiskUsage) {
             let diskUsageWrapper = document.createElement("div");
             diskUsageWrapper.className = "disk-usage";
             let titleDisk = document.createElement("div");
-            titleDisk.innerHTML = `Disk Usage: <strong>Free: ${this.stats.freeSpace} / Capacity: ${this.stats.driveCapacity}</strong>`;
+            titleDisk.innerHTML = `Disk Usage (${this.stats.diskMount || this.config.diskMount}): <strong>Free: ${this.stats.freeSpace} / Capacity: ${this.stats.driveCapacity}</strong>`;
             diskUsageWrapper.appendChild(titleDisk);
             wrapper.appendChild(diskUsageWrapper);
         }
 
-        // Fan speed (align styling with Ping line)
         if (this.config.showFanSpeed && this.stats.fanRpm !== "N/A") {
             let fanWrapper = document.createElement("div");
             fanWrapper.className = "fan-speed";
@@ -262,9 +288,7 @@ Module.register("MMM-SystemStats", {
             wrapper.appendChild(fanWrapper);
         }
 
-        // Ping line (single line, same style: label + <strong>value</strong>)
-        // Always show if pingHost is configured; shows "N/A" until first result.
-        if (this.config.pingHost || true) { // keep visible even if fallback is used in helper
+        if (this.config.showPing) {
             let pingWrapper = document.createElement("div");
             pingWrapper.className = "ping";
             let titlePing = document.createElement("div");
@@ -297,16 +321,15 @@ Module.register("MMM-SystemStats", {
         if (notification === "RAM_USAGE") {
             this.stats.usedRam = payload.usedRam;
             this.stats.freeRam = payload.freeRam;
-            this.stats.totalRam = parseFloat(payload.totalRam);  // NEW
+            this.stats.totalRam = parseFloat(payload.totalRam);
             this.updateDom();
         }
         if (notification === "DISK_USAGE") {
             this.stats.driveCapacity = payload.driveCapacity;
             this.stats.freeSpace = payload.freeSpace;
+            this.stats.diskMount = payload.diskMount || this.config.diskMount;
             this.updateDom();
         }
-
-        // Update ping ms (avg when pingCount > 1; single value otherwise)
         if (notification === "PING_RESULT") {
             if (payload && typeof payload.avgMs === "number") {
                 this.stats.pingMs = payload.avgMs;
@@ -315,7 +338,6 @@ Module.register("MMM-SystemStats", {
             }
             this.updateDom();
         }
-
         if (notification === "FAN_SPEED") {
             this.stats.fanRpm = payload ? payload.rpm : "N/A";
             this.updateDom();
