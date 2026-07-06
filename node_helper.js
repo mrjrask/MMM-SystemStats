@@ -1,5 +1,5 @@
 const NodeHelper = require("node_helper");
-const { exec } = require("child_process");
+const { execFile } = require("child_process");
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
@@ -7,11 +7,11 @@ const path = require("path");
 module.exports = NodeHelper.create({
     start: function() {
         console.log("Starting node_helper for: " + this.name);
-        this.lastIdle = 0;
-        this.lastTotal = 0;
+        this.lastIdle = null;
+        this.lastTotal = null;
 
-        // Ping scheduling state + defaults
         this.pingConfig = {
+            enabled: true,
             pingHost: "1.1.1.1",
             pingCount: 1,
             pingIntervalMin: 10,
@@ -19,7 +19,6 @@ module.exports = NodeHelper.create({
         };
         this._pingTimer = null;
 
-        // Fan polling state
         this.fanConfig = {
             fanUpdateInterval: 10000,
             fanHwmonPath: ""
@@ -28,7 +27,7 @@ module.exports = NodeHelper.create({
         this._fanInputPath = null;
     },
 
-    stop: function () {
+    stop: function() {
         if (this._pingTimer) clearTimeout(this._pingTimer);
         if (this._fanTimer) clearInterval(this._fanTimer);
     },
@@ -38,73 +37,139 @@ module.exports = NodeHelper.create({
             this.getCpuUsage();
         }
         if (notification === "GET_CPU_TEMP") {
-            this.getCpuTempAndRam();
+            this.getCpuTemp(payload || {});
         }
         if (notification === "GET_RAM_USAGE") {
             this.getRamUsage();
         }
         if (notification === "GET_DISK_USAGE") {
-            this.getDiskUsage();
+            this.getDiskUsage(payload || {});
         }
-
         if (notification === "GET_FAN_SPEED") {
             this._configureFanPolling(payload || {});
         }
-
-        // Accept ping config from front-end and (re)start ping loop
         if (notification === "PING_CONFIG") {
             this.pingConfig = Object.assign({}, this.pingConfig, payload || {});
-            this._scheduleNextPing(); // kicks off randomized loop
+            if (!this.pingConfig.enabled) {
+                this._clearPingTimer();
+                this.sendSocketNotification("PING_RESULT", { avgMs: null, error: null });
+                return;
+            }
+            this._scheduleNextPing();
         }
     },
 
-    // Calculate overall CPU usage from /proc/stat
     getCpuUsage: function() {
-        fs.readFile('/proc/stat', 'utf8', (err, data) => {
+        fs.readFile("/proc/stat", "utf8", (err, data) => {
             if (err) {
                 console.error("Error reading /proc/stat:", err);
                 return;
             }
 
-            const cpuData = data.split('\n')[0].replace(/ +/g, ' ').split(' ');
-            const idle = parseInt(cpuData[4]);
-            const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val), 0);
+            const cpuData = data.split("\n")[0].replace(/ +/g, " ").split(" ");
+            const idle = parseInt(cpuData[4], 10);
+            const total = cpuData.slice(1, 8).reduce((acc, val) => acc + parseInt(val, 10), 0);
+
+            if (!Number.isFinite(idle) || !Number.isFinite(total)) {
+                console.error("Error parsing /proc/stat CPU values.");
+                return;
+            }
+
+            if (this.lastIdle === null || this.lastTotal === null) {
+                this.lastIdle = idle;
+                this.lastTotal = total;
+                this.sendSocketNotification("CPU_USAGE", { cpuUsage: "N/A" });
+                return;
+            }
 
             const idleDiff = idle - this.lastIdle;
             const totalDiff = total - this.lastTotal;
 
-            const cpuUsage = Math.round(100 * (1 - idleDiff / totalDiff));
-
             this.lastIdle = idle;
             this.lastTotal = total;
 
+            if (totalDiff <= 0) {
+                this.sendSocketNotification("CPU_USAGE", { cpuUsage: "N/A" });
+                return;
+            }
+
+            const cpuUsage = Math.max(0, Math.min(100, Math.round(100 * (1 - idleDiff / totalDiff))));
             this.sendSocketNotification("CPU_USAGE", { cpuUsage });
         });
     },
 
-    // Get CPU temperature
-    getCpuTempAndRam: function() {
-        fs.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8', (err, data) => {
+    getCpuTemp: function(payload) {
+        const tempPath = this._resolveCpuTempPath(payload.cpuTempPath);
+        if (!tempPath) {
+            this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+            return;
+        }
+
+        fs.readFile(tempPath, "utf8", (err, data) => {
             if (err) {
                 console.error("Error reading CPU temperature:", err);
                 this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
-            } else {
-                const tempC = parseFloat(data) / 1000; // Convert millidegree to degree Celsius
-                const tempF = (tempC * 9/5) + 32;      // Convert Celsius to Fahrenheit
-                if (isNaN(tempC)) {
-                    console.error("Error parsing CPU temperature.");
-                    this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
-                } else {
-                    this.sendSocketNotification("CPU_TEMP", {
-                        cpuTemp: tempC.toFixed(1),
-                        cpuTempF: tempF.toFixed(1)
-                    });
-                }
+                return;
             }
+
+            const rawTemp = parseFloat(data);
+            const tempC = rawTemp > 1000 ? rawTemp / 1000 : rawTemp;
+            const tempF = (tempC * 9 / 5) + 32;
+            if (isNaN(tempC)) {
+                console.error("Error parsing CPU temperature.");
+                this.sendSocketNotification("CPU_TEMP", { cpuTemp: "N/A", cpuTempF: "N/A" });
+                return;
+            }
+
+            this.sendSocketNotification("CPU_TEMP", {
+                cpuTemp: tempC.toFixed(1),
+                cpuTempF: tempF.toFixed(1)
+            });
         });
     },
 
-    // Calculate RAM usage
+    _resolveCpuTempPath: function(configuredPath) {
+        const preferredPath = String(configuredPath || "").trim();
+        if (preferredPath && path.isAbsolute(preferredPath) && fs.existsSync(preferredPath)) {
+            return preferredPath;
+        }
+
+        const thermalPath = "/sys/class/thermal/thermal_zone0/temp";
+        if (fs.existsSync(thermalPath)) {
+            return thermalPath;
+        }
+
+        const base = "/sys/class/hwmon";
+        let hwmons = [];
+        try {
+            hwmons = fs.readdirSync(base);
+        } catch (err) {
+            console.error("Unable to read hwmon directory for CPU temperature:", err.message || err);
+            return null;
+        }
+
+        for (const entry of hwmons) {
+            const hwmonPath = path.join(base, entry);
+            const candidates = [hwmonPath, path.join(hwmonPath, "device")];
+
+            for (const dir of candidates) {
+                let files = [];
+                try {
+                    files = fs.readdirSync(dir);
+                } catch (err) {
+                    continue;
+                }
+
+                const tempFile = files.find((file) => /^temp\d+_input$/.test(file));
+                if (tempFile) {
+                    return path.join(dir, tempFile);
+                }
+            }
+        }
+
+        return null;
+    },
+
     getRamUsage: function() {
         const totalRamBytes = os.totalmem();
         const freeRamBytes = os.freemem();
@@ -116,38 +181,48 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification("RAM_USAGE", {
             usedRam: usedRamGB.toFixed(2),
             freeRam: freeRamGB.toFixed(2),
-            totalRam: totalRamGB.toFixed(2)   // send total for nice label
+            totalRam: totalRamGB.toFixed(2)
         });
     },
 
-    // Disk Usage via df
-    getDiskUsage: function() {
-        exec("df -h --output=source,size,avail,target /", (err, stdout, stderr) => {
+    getDiskUsage: function(payload) {
+        const diskMount = String(payload.diskMount || "/").trim() || "/";
+
+        execFile("df", ["-h", "--output=source,size,avail,target", diskMount], (err, stdout, stderr) => {
             if (err) {
-                console.error("Error fetching disk usage:", err);
+                console.error("Error fetching disk usage:", err.message || stderr || err);
+                this.sendSocketNotification("DISK_USAGE", {
+                    driveCapacity: "N/A",
+                    freeSpace: "N/A",
+                    diskMount
+                });
                 return;
             }
 
-            const lines = stdout.trim().split('\n');
+            const lines = stdout.trim().split("\n");
             if (lines.length >= 2) {
-                const diskInfo = lines[1].replace(/ +/g, ' ').split(' ');
+                const diskInfo = lines[1].replace(/ +/g, " ").split(" ");
                 const driveCapacity = diskInfo[1].replace("G", "GB");
                 const freeSpace = diskInfo[2].replace("G", "GB");
 
                 this.sendSocketNotification("DISK_USAGE", {
-                    driveCapacity: driveCapacity,
-                    freeSpace: freeSpace
+                    driveCapacity,
+                    freeSpace,
+                    diskMount: diskInfo[3] || diskMount
                 });
             }
         });
     },
 
-    // ───── Ping support (average shown when pingCount > 1) ──────────────────
-    _scheduleNextPing: function () {
+    _clearPingTimer: function() {
         if (this._pingTimer) {
             clearTimeout(this._pingTimer);
             this._pingTimer = null;
         }
+    },
+
+    _scheduleNextPing: function() {
+        this._clearPingTimer();
         const minS = Math.max(1, Number(this.pingConfig.pingIntervalMin) || 10);
         const maxS = Math.max(minS, Number(this.pingConfig.pingIntervalMax) || 30);
         const delayMs = Math.floor(minS * 1000 + Math.random() * ((maxS - minS) * 1000));
@@ -155,29 +230,36 @@ module.exports = NodeHelper.create({
         this._pingTimer = setTimeout(() => this._performPing(), delayMs);
     },
 
-    _performPing: function () {
-        // Fallback host if pingHost is missing/empty → 8.8.8.8
-        const host = (this.pingConfig.pingHost && String(this.pingConfig.pingHost).trim()) ? this.pingConfig.pingHost : "8.8.8.8";
+    _isValidPingHost: function(host) {
+        return /^[A-Za-z0-9.-]+$/.test(host) && host.length <= 253;
+    },
+
+    _performPing: function() {
+        const host = (this.pingConfig.pingHost && String(this.pingConfig.pingHost).trim()) ? String(this.pingConfig.pingHost).trim() : "8.8.8.8";
         const count = Math.max(1, parseInt(this.pingConfig.pingCount, 10) || 1);
 
-        // -n (numeric), -q (summary), -c <count>: works on Linux/macOS
-        const cmd = `ping -n -q -c ${count} ${host}`;
+        if (!this._isValidPingHost(host)) {
+            this.sendSocketNotification("PING_RESULT", {
+                host,
+                avgMs: null,
+                error: "Invalid ping host"
+            });
+            this._scheduleNextPing();
+            return;
+        }
 
-        exec(cmd, { timeout: Math.max(5000, 2000 * count) }, (error, stdout, stderr) => {
+        execFile("ping", ["-n", "-q", "-c", String(count), host], { timeout: Math.max(5000, 2000 * count) }, (error, stdout, stderr) => {
             let avg = null;
             const out = `${stdout || ""}\n${stderr || ""}`;
 
-            // Linux: "rtt min/avg/max/mdev = 13.456/15.789/..."
-            // BSD/macOS: "round-trip min/avg/max/stddev = 13.456/15.789/..."
             const matchLinux = out.match(/rtt [^=]*=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/);
-            const matchBSD   = out.match(/round-trip [^=]*=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/);
+            const matchBSD = out.match(/round-trip [^=]*=\s*([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)\s*ms/);
             const m = matchLinux || matchBSD;
 
             if (m && m[2]) {
                 const v = parseFloat(m[2]);
                 avg = Number.isNaN(v) ? null : v;
             } else {
-                // If count==1, some platforms only emit "time=XX ms"
                 const one = out.match(/time[=<]\s*([\d.]+)\s*ms/);
                 if (one && one[1]) {
                     const v = parseFloat(one[1]);
@@ -187,18 +269,16 @@ module.exports = NodeHelper.create({
 
             this.sendSocketNotification("PING_RESULT", {
                 host,
-                avgMs: avg, // average across pingCount (or single value)
+                avgMs: avg,
                 error: error ? (error.message || "Ping failed") : null
             });
 
-            // Schedule next randomized run
             this._scheduleNextPing();
         });
     },
 
-    // ───── Fan speed telemetry (Raspberry Pi 5 PWM fan tachometer) ────────
-    _configureFanPolling: function (payload) {
-        const intervalMs = Math.max(500, Number(payload.fanUpdateInterval || this.fanConfig.fanUpdateInterval) || 10000);
+    _configureFanPolling: function(payload) {
+        const intervalMs = Math.max(1000, Number(payload.fanUpdateInterval || this.fanConfig.fanUpdateInterval) || 10000);
         const hwmonPath = payload.fanHwmonPath || this.fanConfig.fanHwmonPath || "";
 
         let shouldRestart = false;
@@ -208,19 +288,18 @@ module.exports = NodeHelper.create({
         }
         if (hwmonPath !== this.fanConfig.fanHwmonPath) {
             this.fanConfig.fanHwmonPath = hwmonPath;
-            this._fanInputPath = null; // force rediscovery
+            this._fanInputPath = null;
             shouldRestart = true;
         }
 
         if (shouldRestart || !this._fanTimer) {
             if (this._fanTimer) clearInterval(this._fanTimer);
-            // Kick off immediately then on interval
             this._pollFanSpeed();
             this._fanTimer = setInterval(() => this._pollFanSpeed(), this.fanConfig.fanUpdateInterval);
         }
     },
 
-    _pollFanSpeed: function () {
+    _pollFanSpeed: function() {
         const fanPath = this._getFanInputPath();
 
         if (!fanPath) {
@@ -231,7 +310,6 @@ module.exports = NodeHelper.create({
         fs.readFile(fanPath, "utf8", (err, data) => {
             if (err) {
                 console.error("Error reading fan speed:", err.message || err);
-                // Force rediscovery on next tick in case hwmon index changed
                 this._fanInputPath = null;
                 this.sendSocketNotification("FAN_SPEED", { rpm: "N/A" });
                 return;
@@ -243,8 +321,7 @@ module.exports = NodeHelper.create({
         });
     },
 
-    _getFanInputPath: function () {
-        // Preferred: explicit path supplied via config
+    _getFanInputPath: function() {
         if (this.fanConfig.fanHwmonPath) {
             const direct = this.fanConfig.fanHwmonPath;
             if (fs.existsSync(direct)) {

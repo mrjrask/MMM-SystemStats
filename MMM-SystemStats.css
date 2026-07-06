@@ -5,12 +5,17 @@
     color: #ffffff; /* Modern, clean text color */
 }
 
-.cpu-usage, .cpu-temp, .ram-usage {
+.system-stats .cpu-usage,
+.system-stats .cpu-temp,
+.system-stats .ram-usage,
+.system-stats .disk-usage,
+.system-stats .fan-speed,
+.system-stats .ping {
     margin: 0;
     padding: 5px 0; /* Remove excessive padding */
 }
 
-progress {
+.system-stats progress {
     width: 100%;
     height: 15px;
     background-color: #333;
@@ -18,32 +23,30 @@ progress {
     border: 1px solid #555;
 }
 
-progress::-webkit-progress-value {
+.system-stats progress::-webkit-progress-value {
     background-color: #4CAF50; /* Sleek green bar for CPU usage */
     border-radius: 8px;
 }
 
-progress::-moz-progress-bar {
+.system-stats progress::-moz-progress-bar {
     background-color: #4CAF50;
     border-radius: 8px;
 }
 
-strong {
+.system-stats strong {
     color: #4CAF50; /* Green for emphasized text */
     font-weight: bold;
 }
 
-div {
+.system-stats div {
     margin: 2px 0; /* Remove space between lines */
 }
 
-/* Temperature color coding styles */
-.temp-value {
+.system-stats .temp-value {
     font-weight: bold;
 }
 
-/* Pulsing animation for critical temperatures (80°C+) */
-.temp-critical {
+.system-stats .temp-critical {
     animation: temp-pulse 1.5s ease-in-out infinite;
 }
 

@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "A MagicMirror module to display system statistics (CPU, RAM, etc.)",
   "main": "MMM-SystemStats.js",
+  "scripts": {
+    "lint": "node --check node_helper.js && node --check MMM-SystemStats.js",
+    "test": "npm run lint"
+  },
   "dependencies": {},
   "author": "Jason",
   "license": "MIT"
