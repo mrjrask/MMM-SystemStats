@@ -53,7 +53,7 @@ A MagicMirror module that displays CPU usage, CPU temperature, memory usage, dis
 | `showDiskUsage` | `true` | Show or hide disk usage. |
 | `showFanSpeed` | `true` | Show or hide fan speed when a fan tachometer can be read. |
 | `showPing` | `true` | Show or hide ping latency and enable or disable ping polling. |
-| `pingHost` | `"1.1.1.1"` | Hostname or IP address used for latency checks. Empty values fall back to `8.8.8.8`. |
+| `pingHost` | `"1.1.1.1"` | Hostname, IPv4 address, or IPv6 literal used for latency checks. Empty values fall back to `8.8.8.8`. |
 | `pingCount` | `1` | Number of pings to send for each sample. When greater than `1`, the displayed value is the average. |
 | `pingIntervalMin` | `10` | Minimum randomized ping interval in seconds. Values below `1` are raised to `1`. |
 | `pingIntervalMax` | `30` | Maximum randomized ping interval in seconds. Values below `pingIntervalMin` are raised to the minimum. |

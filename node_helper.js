@@ -231,7 +231,9 @@ module.exports = NodeHelper.create({
     },
 
     _isValidPingHost: function(host) {
-        return /^[A-Za-z0-9.-]+$/.test(host) && host.length <= 253;
+        // Keep validation focused on preventing option injection while allowing
+        // hostnames, IPv4 addresses, IPv6 literals, and IPv6 zone identifiers.
+        return /^[A-Za-z0-9.:%-]+$/.test(host) && host.length <= 253 && !host.startsWith("-");
     },
 
     _performPing: function() {
