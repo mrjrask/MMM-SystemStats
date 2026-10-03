@@ -16,8 +16,10 @@
 }
 
 .system-stats progress {
+    display: block; /* keep the bar on its own row with predictable spacing */
     width: 100%;
     height: 15px;
+    margin: 0; /* no browser default margin around the bar */
     background-color: #333;
     border-radius: 8px;
     border: 1px solid #555;
@@ -40,6 +42,11 @@
 
 .system-stats div {
     margin: 2px 0; /* Remove space between lines */
+}
+
+/* Tighten the gap between the "CPU Usage" label and the bar directly below it. */
+.system-stats .cpu-usage div {
+    margin-bottom: 0;
 }
 
 .system-stats .temp-value {
