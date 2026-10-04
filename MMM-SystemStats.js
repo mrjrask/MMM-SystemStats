@@ -32,6 +32,10 @@ Module.register("MMM-SystemStats", {
         pingIntervalMax: 30   // seconds (maximum)
     },
 
+    getStyles: function() {
+        return ["MMM-SystemStats.css"];
+    },
+
     start: function() {
         this.timers = [];
         this.stats = {
