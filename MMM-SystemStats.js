@@ -270,11 +270,11 @@ Module.register("MMM-SystemStats", {
 
             if (this.config.showRamUsage) {
                 const totalLabel = this.niceTotalRamLabel(this.stats.totalRam);
-                parts.push(`${totalLabel}: <strong>U: ${this.stats.usedRam}GB / F: ${this.stats.freeRam}GB</strong>`);
+                parts.push(`${totalLabel}: <strong>${this.stats.usedRam}GB / ${this.stats.freeRam}GB</strong>`);
             }
 
             if (this.config.showDiskUsage) {
-                parts.push(`Disk: <strong>${this.stats.freeSpace} of ${this.stats.driveCapacity} free</strong>`);
+                parts.push(`Disk: <strong>${this.stats.freeSpace} / ${this.stats.driveCapacity}</strong>`);
             }
 
             titleMemDisk.innerHTML = parts.join(" | ");
