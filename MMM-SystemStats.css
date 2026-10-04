@@ -1,70 +1,14 @@
-.system-stats {
-    font-size: 16px;
-    text-align: left;
-    font-family: 'Arial', sans-serif;
-    color: #ffffff; /* Modern, clean text color */
-}
+/* Spacing-only tweaks: fonts, colors and alignment come from the MagicMirror theme. */
 
-.system-stats .cpu-usage,
-.system-stats .cpu-temp,
-.system-stats .ram-usage,
-.system-stats .disk-usage,
-.system-stats .fan-speed,
-.system-stats .ping {
-    margin: 0;
-    padding: 5px 0; /* Remove excessive padding */
-}
-
-.system-stats progress {
-    display: block; /* keep the bar on its own row with predictable spacing */
-    width: 100%;
-    height: 15px;
-    margin: 0; /* no browser default margin around the bar */
-    background-color: #333;
-    border-radius: 8px;
-    border: 1px solid #555;
-}
-
-.system-stats progress::-webkit-progress-value {
-    background-color: #4CAF50; /* Sleek green bar for CPU usage */
-    border-radius: 8px;
-}
-
-.system-stats progress::-moz-progress-bar {
-    background-color: #4CAF50;
-    border-radius: 8px;
-}
-
-.system-stats strong {
-    color: #4CAF50; /* Green for emphasized text */
-    font-weight: bold;
-}
-
-.system-stats div {
-    margin: 2px 0; /* Remove space between lines */
-}
-
-/* Tighten the gap between the "CPU Usage" label and the bar directly below it,
-   and give the module above some breathing room. */
+/* Keep the CPU bar on its own row, right-aligned like the text, with equal space
+   above (below the "CPU Usage" label) and below (above "CPU Temp"). */
 .system-stats .cpu-usage {
-    padding: 0;
     margin-top: 10px;
 }
 
-.system-stats .cpu-usage div {
-    margin: 0;
-    padding: 0;
-    line-height: 1.1;
-}
-
 .system-stats .cpu-usage progress {
-    margin: 2px 0 0;
-    padding: 0;
-    vertical-align: top;
-}
-
-.system-stats .temp-value {
-    font-weight: bold;
+    display: block;
+    margin: 0.15em 0 0.15em auto;
 }
 
 .system-stats .temp-critical {
