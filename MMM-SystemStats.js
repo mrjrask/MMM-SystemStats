@@ -262,24 +262,24 @@ Module.register("MMM-SystemStats", {
             wrapper.appendChild(cpuTempWrapper);
         }
 
-        if (this.config.showRamUsage) {
-            let ramUsageWrapper = document.createElement("div");
-            ramUsageWrapper.className = "ram-usage";
-            let titleRam = document.createElement("div");
+        if (this.config.showRamUsage || this.config.showDiskUsage) {
+            let memDiskWrapper = document.createElement("div");
+            memDiskWrapper.className = "ram-disk-usage";
+            let titleMemDisk = document.createElement("div");
+            const parts = [];
 
-            const totalLabel = this.niceTotalRamLabel(this.stats.totalRam);
-            titleRam.innerHTML = `${totalLabel}: <strong>Used: ${this.stats.usedRam}GB / Free: ${this.stats.freeRam}GB</strong>`;
-            ramUsageWrapper.appendChild(titleRam);
-            wrapper.appendChild(ramUsageWrapper);
-        }
+            if (this.config.showRamUsage) {
+                const totalLabel = this.niceTotalRamLabel(this.stats.totalRam);
+                parts.push(`${totalLabel}: <strong>U: ${this.stats.usedRam}GB / F: ${this.stats.freeRam}GB</strong>`);
+            }
 
-        if (this.config.showDiskUsage) {
-            let diskUsageWrapper = document.createElement("div");
-            diskUsageWrapper.className = "disk-usage";
-            let titleDisk = document.createElement("div");
-            titleDisk.innerHTML = `Disk Usage (${this.stats.diskMount || this.config.diskMount}): <strong>Free: ${this.stats.freeSpace} / Capacity: ${this.stats.driveCapacity}</strong>`;
-            diskUsageWrapper.appendChild(titleDisk);
-            wrapper.appendChild(diskUsageWrapper);
+            if (this.config.showDiskUsage) {
+                parts.push(`Disk: <strong>${this.stats.freeSpace} of ${this.stats.driveCapacity} free</strong>`);
+            }
+
+            titleMemDisk.innerHTML = parts.join(" | ");
+            memDiskWrapper.appendChild(titleMemDisk);
+            wrapper.appendChild(memDiskWrapper);
         }
 
         if (this.config.showFanSpeed && this.stats.fanRpm !== "N/A") {

@@ -188,7 +188,7 @@ module.exports = NodeHelper.create({
     getDiskUsage: function(payload) {
         const diskMount = String(payload.diskMount || "/").trim() || "/";
 
-        execFile("df", ["-h", "--output=source,size,avail,target", diskMount], (err, stdout, stderr) => {
+        execFile("df", ["-B1", "--output=source,size,avail,target", diskMount], (err, stdout, stderr) => {
             if (err) {
                 console.error("Error fetching disk usage:", err.message || stderr || err);
                 this.sendSocketNotification("DISK_USAGE", {
@@ -202,8 +202,9 @@ module.exports = NodeHelper.create({
             const lines = stdout.trim().split("\n");
             if (lines.length >= 2) {
                 const diskInfo = lines[1].replace(/ +/g, " ").split(" ");
-                const driveCapacity = diskInfo[1].replace("G", "GB");
-                const freeSpace = diskInfo[2].replace("G", "GB");
+                const toGB = (bytes) => `${(Number(bytes) / (1024 ** 3)).toFixed(1)}GB`;
+                const driveCapacity = toGB(diskInfo[1]);
+                const freeSpace = toGB(diskInfo[2]);
 
                 this.sendSocketNotification("DISK_USAGE", {
                     driveCapacity,
