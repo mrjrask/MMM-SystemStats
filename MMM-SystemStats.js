@@ -228,6 +228,9 @@ Module.register("MMM-SystemStats", {
         if (this.config.showCpuUsage) {
             let cpuUsageWrapper = document.createElement("div");
             cpuUsageWrapper.className = "cpu-usage";
+            if (typeof this.data.position === "string" && this.data.position.indexOf("right") !== -1) {
+                cpuUsageWrapper.classList.add("align-right");
+            }
             let titleCpu = document.createElement("div");
             const cpuUsage = Number(this.stats.cpuUsage);
             const cpuLabel = Number.isFinite(cpuUsage) ? `${cpuUsage}%` : "N/A";
