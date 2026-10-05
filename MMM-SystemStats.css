@@ -11,6 +11,11 @@
     margin: 0.15em 0 0.15em auto;
 }
 
+/* In right-side regions the bar fills from the right edge toward the left. */
+.system-stats .cpu-usage.align-right progress {
+    transform: scaleX(-1);
+}
+
 .system-stats .temp-critical {
     animation: temp-pulse 1.5s ease-in-out infinite;
 }
