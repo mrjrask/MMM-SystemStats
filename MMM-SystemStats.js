@@ -24,6 +24,20 @@ Module.register("MMM-SystemStats", {
         showFanSpeed: true,
         showPing: true,
 
+        // Temperature thresholds for color coding (in Celsius). Each value is the
+        // temperature at which that color starts; below `warm` is green. Matches
+        // MMM-RemoteTempMonitor.
+        tempThresholds: {
+            warm: 50,        // 50-55: lime
+            warmer: 55,      // 55-60: yellow
+            hot: 60,         // 60-65: amber
+            hotter: 65,      // 65-70: orange
+            veryHot: 70,     // 70-75: red-orange
+            severe: 75,      // 75-80: red
+            critical: 80,    // 80-85: purple (pulsing)
+            extreme: 85      // 85+: magenta (fast pulse)
+        },
+
         // Ping configuration (overridable in config.js)
         // Helper also has a fallback to 8.8.8.8 if this ends up empty/undefined.
         pingHost: "1.1.1.1",
@@ -183,20 +197,28 @@ Module.register("MMM-SystemStats", {
         return "#d00000";
     },
 
-    colorForTemp: function(tempC) {
+    getTempColorClass: function(tempC) {
         const temp = parseFloat(tempC);
-        if (isNaN(temp)) return "#4CAF50";
+        if (isNaN(temp)) return "temp-normal";
 
-        if (temp < 50) return "#4CAF50";
-        if (temp < 60) return "#9ACD32";
-        if (temp < 70) return "#FF8C00";
-        if (temp < 80) return "#FF0000";
-        return "#9932CC";
-    },
+        const thresholds = Object.assign({}, this.defaults.tempThresholds, this.config.tempThresholds);
+        const tiers = [
+            ["extreme", "temp-extreme"],
+            ["critical", "temp-critical"],
+            ["severe", "temp-severe"],
+            ["veryHot", "temp-very-hot"],
+            ["hotter", "temp-hotter"],
+            ["hot", "temp-hot"],
+            ["warmer", "temp-warmer"],
+            ["warm", "temp-warm"]
+        ];
 
-    isTempCritical: function(tempC) {
-        const temp = parseFloat(tempC);
-        return !isNaN(temp) && temp >= 80;
+        for (const [key, className] of tiers) {
+            if (typeof thresholds[key] === "number" && temp >= thresholds[key]) {
+                return className;
+            }
+        }
+        return "temp-normal";
     },
 
     niceTotalRamLabel: function(totalRamGBFloat) {
@@ -248,16 +270,14 @@ Module.register("MMM-SystemStats", {
             cpuTempWrapper.className = "cpu-temp";
             let titleTemp = document.createElement("div");
 
-            const tempColor = this.colorForTemp(this.stats.cpuTemp);
-            const isCritical = this.isTempCritical(this.stats.cpuTemp);
-            const pulseClass = isCritical ? " temp-critical" : "";
+            const tempClass = this.getTempColorClass(this.stats.cpuTemp);
 
             let tempText = "CPU Temp: <strong>";
             if (this.config.showCpuTempC) {
-                tempText += `<span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTemp}ºC</span>`;
+                tempText += `<span class="temp-value ${tempClass}">${this.stats.cpuTemp}ºC</span>`;
             }
             if (this.config.showCpuTempF) {
-                tempText += ` / <span class="temp-value${pulseClass}" style="color:${tempColor}">${this.stats.cpuTempF}ºF</span>`;
+                tempText += ` / <span class="temp-value ${tempClass}">${this.stats.cpuTempF}ºF</span>`;
             }
             tempText += "</strong>";
             titleTemp.innerHTML = tempText;

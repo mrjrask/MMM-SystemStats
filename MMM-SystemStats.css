@@ -16,8 +16,53 @@
     transform: scaleX(-1);
 }
 
+/* Temperature color scale (matches MMM-RemoteTempMonitor):
+   green -> lime -> yellow -> amber -> orange -> red-orange -> red -> purple -> magenta */
+.system-stats .temp-normal {
+    color: #00ff00;
+    text-shadow: 0 0 5px rgba(0,255,0, 0.6);
+}
+
+.system-stats .temp-warm {
+    color: #b5e61d;
+    text-shadow: 0 0 5px rgba(181,230,29, 0.6);
+}
+
+.system-stats .temp-warmer {
+    color: #ffd700;
+    text-shadow: 0 0 5px rgba(255,215,0, 0.6);
+}
+
+.system-stats .temp-hot {
+    color: #ffb000;
+    text-shadow: 0 0 6px rgba(255,176,0, 0.6);
+}
+
+.system-stats .temp-hotter {
+    color: #ff8c00;
+    text-shadow: 0 0 6px rgba(255,140,0, 0.6);
+}
+
+.system-stats .temp-very-hot {
+    color: #ff4500;
+    text-shadow: 0 0 8px rgba(255,69,0, 0.6);
+}
+
+.system-stats .temp-severe {
+    color: #ff0000;
+    text-shadow: 0 0 8px rgba(255,0,0, 0.6);
+}
+
 .system-stats .temp-critical {
-    animation: temp-pulse 1.5s ease-in-out infinite;
+    color: #9400d3;
+    text-shadow: 0 0 10px rgba(148,0,211, 0.6);
+    animation: temp-pulse 2s ease-in-out infinite;
+}
+
+.system-stats .temp-extreme {
+    color: #ff00ff;
+    text-shadow: 0 0 12px rgba(255,0,255, 0.6);
+    animation: temp-pulse 1s ease-in-out infinite;
 }
 
 @keyframes temp-pulse {

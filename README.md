@@ -49,6 +49,7 @@ A MagicMirror module that displays CPU usage, CPU temperature, memory usage, dis
 | `showCpuUsage` | `true` | Show or hide CPU usage. |
 | `showCpuTempC` | `true` | Show or hide CPU temperature in Celsius. |
 | `showCpuTempF` | `true` | Show or hide CPU temperature in Fahrenheit. |
+| `tempThresholds` | see below | Temperatures (°C) at which the CPU temperature color changes. |
 | `showRamUsage` | `true` | Show or hide RAM usage. |
 | `showDiskUsage` | `true` | Show or hide disk usage. |
 | `showFanSpeed` | `true` | Show or hide fan speed when a fan tachometer can be read. |
@@ -73,3 +74,22 @@ Run the lightweight syntax check before submitting changes:
 ```sh
 npm test
 ```
+
+## Temperature Colors
+
+The CPU temperature is color-coded using the same scale as [MMM-RemoteTempMonitor](https://github.com/mrjrask/MMM-RemoteTempMonitor). Each value is the temperature (°C) at which that color starts; below `warm` is green.
+
+```javascript
+tempThresholds: {
+    warm: 50,        // 50-55°C: lime (below 50°C: green)
+    warmer: 55,      // 55-60°C: yellow
+    hot: 60,         // 60-65°C: amber
+    hotter: 65,      // 65-70°C: orange
+    veryHot: 70,     // 70-75°C: red-orange
+    severe: 75,      // 75-80°C: red
+    critical: 80,    // 80-85°C: purple (pulsing)
+    extreme: 85      // 85°C+: magenta (fast pulse)
+}
+```
+
+You can override any subset of these in your config.
