@@ -81,10 +81,13 @@ Module.register("MMM-SystemStats", {
 
     suspend: function() {
         this.clearTimers();
+        this.sendSocketNotification("PING_CONFIG", { enabled: false });
+        this.sendSocketNotification("FAN_CONFIG", { enabled: false });
     },
 
     resume: function() {
         this.clearTimers();
+        this.requestFanTelemetry();
         this.scheduleCpuStatsUpdate();
         this.scheduleTempUpdate();
         this.scheduleRamUpdate();

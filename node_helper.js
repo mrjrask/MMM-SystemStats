@@ -48,6 +48,10 @@ module.exports = NodeHelper.create({
         if (notification === "GET_FAN_SPEED") {
             this._configureFanPolling(payload || {});
         }
+        if (notification === "FAN_CONFIG" && payload && payload.enabled === false) {
+            if (this._fanTimer) clearInterval(this._fanTimer);
+            this._fanTimer = null;
+        }
         if (notification === "PING_CONFIG") {
             this.pingConfig = Object.assign({}, this.pingConfig, payload || {});
             if (!this.pingConfig.enabled) {
@@ -224,6 +228,7 @@ module.exports = NodeHelper.create({
 
     _scheduleNextPing: function() {
         this._clearPingTimer();
+        if (!this.pingConfig.enabled) return;
         const minS = Math.max(1, Number(this.pingConfig.pingIntervalMin) || 10);
         const maxS = Math.max(minS, Number(this.pingConfig.pingIntervalMax) || 30);
         const delayMs = Math.floor(minS * 1000 + Math.random() * ((maxS - minS) * 1000));
